@@ -12,6 +12,21 @@ function MenuDetailPage() {
   const { id } = useParams();
   const { addToCart } = useCart();
 
+  // =========================
+  // AMBIL DATA MEJA
+  // =========================
+
+  const savedTable = localStorage.getItem('restaurantTable');
+
+  const parsedTable = savedTable
+    ? JSON.parse(savedTable)
+    : null;
+
+  const table =
+    parsedTable?.table ||
+    parsedTable?.data ||
+    parsedTable;
+
   const [menu, setMenu] = useState(null);
 
   const [variants, setVariants] = useState([]);
@@ -242,7 +257,11 @@ function MenuDetailPage() {
         <div className="container">
 
           <Link
-            to="/"
+            to={
+              table?.code
+                ? `/?table=${table.code}`
+                : '/'
+            }
             className="detail-back"
           >
             ← Kembali ke menu

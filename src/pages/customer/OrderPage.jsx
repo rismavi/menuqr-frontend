@@ -1,51 +1,85 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useCart } from '../../context/useCart';
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useCart } from "../../context/useCart";
 import {
   createOrder,
   getWhatsAppUrl,
-} from '../../services/orderService';
+} from "../../services/orderService";
 
 function OrderPage() {
   const { cartItems } = useCart();
 
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [notes, setNotes] = useState('');
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [notes, setNotes] = useState("");
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   // Ambil data meja dari localStorage
   const savedTable =
-    localStorage.getItem('restaurantTable');
+    localStorage.getItem("restaurantTable");
 
   const parsedTable = savedTable
     ? JSON.parse(savedTable)
     : null;
 
-  // Data meja sudah disimpan dalam bentuk:
-  // {
-  //   id: 2,
-  //   name: "Table 01",
-  //   code: "HOSHI-001",
-  //   ...
-  // }
   const table =
     parsedTable?.table ||
     parsedTable?.data ||
     parsedTable;
 
+  // Hitung total pesanan
   const grandTotal = cartItems.reduce(
     (total, item) =>
-      total + Number(item.totalPrice),
+      total + (Number(item.totalPrice) || 0),
     0
   );
 
+  // Link kembali ke menu
+  const menuLink = table?.code
+    ? `/?table=${table.code}`
+    : "/";
+
+  /*
+   * =========================
+   * VALIDASI FORM
+   * =========================
+   *
+   * Nama dan nomor WhatsApp wajib diisi.
+   * Catatan pesanan bersifat opsional.
+   */
+
+  const isFormValid =
+    name.trim() !== "" &&
+    phone.trim() !== "";
+
+  /*
+   * =========================
+   * KONFIRMASI PESANAN
+   * =========================
+   */
+
   const handleConfirmOrder = async () => {
+    // Validasi nama
+    if (name.trim() === "") {
+      setError(
+        "Nama wajib diisi sebelum melakukan konfirmasi pesanan."
+      );
+      return;
+    }
+
+    // Validasi nomor WhatsApp
+    if (phone.trim() === "") {
+      setError(
+        "Nomor WhatsApp wajib diisi sebelum melakukan konfirmasi pesanan."
+      );
+      return;
+    }
+
     try {
       setLoading(true);
-      setError('');
+      setError("");
 
       const orderData = {
         restaurant_id:
@@ -55,10 +89,10 @@ function OrderPage() {
           table?.id || null,
 
         customer_name:
-          name || null,
+          name.trim(),
 
         note:
-          notes || null,
+          notes.trim() || null,
 
         items: cartItems.map((item) => ({
           menu_id:
@@ -82,15 +116,16 @@ function OrderPage() {
       };
 
       console.log(
-        'Data yang dikirim:',
+        "Data yang dikirim:",
         orderData
       );
 
+      // Buat pesanan
       const result =
         await createOrder(orderData);
 
       console.log(
-        'Response order:',
+        "Response order:",
         result
       );
 
@@ -98,259 +133,636 @@ function OrderPage() {
         result.data.id;
 
       console.log(
-        'ID Pesanan:',
+        "ID Pesanan:",
         orderId
       );
 
+      // Ambil link WhatsApp
       const whatsappResult =
         await getWhatsAppUrl(orderId);
 
       console.log(
-        'Response WhatsApp:',
+        "Response WhatsApp:",
         whatsappResult
       );
 
+      // Buka WhatsApp
       if (
         whatsappResult.whatsapp_url
       ) {
         window.open(
           whatsappResult.whatsapp_url,
-          '_blank'
+          "_blank"
         );
       } else {
         setError(
-          'Pesanan berhasil dibuat, tetapi link WhatsApp tidak ditemukan.'
+          "Pesanan berhasil dibuat, tetapi link WhatsApp tidak ditemukan."
         );
       }
+
     } catch (err) {
       console.error(
-        'Gagal membuat pesanan:',
+        "Gagal membuat pesanan:",
         err
       );
 
       setError(
-        'Gagal membuat pesanan. Silakan coba lagi.'
+        "Gagal membuat pesanan. Silakan coba lagi."
       );
+
     } finally {
       setLoading(false);
     }
   };
 
-  // Jika keranjang kosong
+  /*
+   * =========================
+   * KERANJANG KOSONG
+   * =========================
+   */
+
   if (cartItems.length === 0) {
     return (
-      <div className="container py-5">
-        <div className="text-center">
-          <h2 className="fw-bold mb-3">
-            Pesanan Kosong
-          </h2>
+      <main className="order-page">
 
-          <p className="text-muted mb-4">
-            Belum ada menu yang dipilih.
-          </p>
+        <div className="container order-container">
 
-          <Link
-            to="/"
-            className="btn btn-dark"
-          >
-            Kembali ke Menu
-          </Link>
+          <div className="order-empty">
+
+            <div className="order-empty-icon">
+              🛒
+            </div>
+
+            <p className="order-label">
+              YOUR ORDER
+            </p>
+
+            <h1>
+              Pesanan Kosong
+            </h1>
+
+            <p>
+              Belum ada menu yang dipilih.
+            </p>
+
+            <Link
+              to={menuLink}
+              className="order-primary-button"
+            >
+              Kembali ke Menu
+              <span>→</span>
+            </Link>
+
+          </div>
+
         </div>
-      </div>
+
+      </main>
     );
   }
 
   return (
-    <div className="container py-4">
-      <h2 className="fw-bold mb-4">
-        Pesan Sekarang
-      </h2>
+    <main className="order-page">
 
-      {/* Pesan error */}
-      {error && (
-        <div className="alert alert-danger">
-          {error}
-        </div>
-      )}
+      <div className="container order-container">
 
-      {/* Informasi meja */}
-      {table && (
-        <div className="alert alert-light border mb-4">
-          <div className="fw-bold">
-            Meja {table.name}
+        {/* =========================
+            HEADER
+        ========================== */}
+
+        <div className="order-page-header">
+
+          <Link
+            to="/cart"
+            className="order-back"
+          >
+            <span>←</span>
+            Kembali ke keranjang
+          </Link>
+
+          <div className="order-title-area">
+
+            <p className="order-label">
+              CHECKOUT
+            </p>
+
+            <h1>
+              Pesan Sekarang
+            </h1>
+
+            <p>
+              Lengkapi informasi pesananmu
+              sebelum melakukan konfirmasi.
+            </p>
+
           </div>
 
-          <small className="text-muted">
-            Pesanan akan dicatat untuk meja ini.
-          </small>
         </div>
-      )}
 
-      {/* Jika meja belum ditemukan */}
-      {!table && (
-        <div className="alert alert-warning mb-4">
-          Meja belum terdeteksi. Silakan
-          kembali ke menu dan scan QR Code meja.
-        </div>
-      )}
 
-      {/* Data pelanggan */}
-      <div className="card border-0 shadow-sm mb-4">
-        <div className="card-body">
-          <h5 className="fw-bold mb-3">
-            Data Pelanggan
-          </h5>
+        {/* =========================
+            ERROR
+        ========================== */}
 
-          <div className="mb-3">
-            <label className="form-label">
-              Nama
-            </label>
+        {error && (
+          <div className="order-error">
 
-            <input
-              type="text"
-              className="form-control"
-              placeholder="Masukkan nama"
-              value={name}
-              onChange={(e) =>
-                setName(e.target.value)
-              }
-            />
+            <span>
+              !
+            </span>
+
+            <div>
+
+              <strong>
+                Periksa kembali data pesanan
+              </strong>
+
+              <p>
+                {error}
+              </p>
+
+            </div>
+
+          </div>
+        )}
+
+
+        {/* =========================
+            INFORMASI MEJA
+        ========================== */}
+
+        {table && (
+          <div className="order-table-card">
+
+            <div className="order-table-icon">
+              #
+            </div>
+
+            <div>
+
+              <span>
+                YOUR TABLE
+              </span>
+
+              <strong>
+                {table.name}
+              </strong>
+
+              <small>
+                Pesanan akan dicatat untuk meja ini.
+              </small>
+
+            </div>
+
+          </div>
+        )}
+
+
+        {/* =========================
+            MEJA BELUM TERDETEKSI
+        ========================== */}
+
+        {!table && (
+          <div className="order-warning">
+
+            <span>
+              !
+            </span>
+
+            <div>
+
+              <strong>
+                Meja belum terdeteksi
+              </strong>
+
+              <p>
+                Silakan kembali ke menu dan
+                scan QR Code meja.
+              </p>
+
+            </div>
+
+          </div>
+        )}
+
+
+        {/* =========================
+            INFORMASI PESANAN
+        ========================== */}
+
+        <div className="order-reminder">
+
+          <div className="order-reminder-icon">
+            ℹ
           </div>
 
-          <div className="mb-3">
-            <label className="form-label">
-              Nomor WhatsApp
-            </label>
+          <div className="order-reminder-content">
 
-            <input
-              type="tel"
-              className="form-control"
-              placeholder="Contoh: 081234567890"
-              value={phone}
-              onChange={(e) =>
-                setPhone(e.target.value)
-              }
-            />
+            <strong>
+              Informasi Pesanan
+            </strong>
+
+            <p>
+              Setelah pesanan dikonfirmasi,
+              detail pesanan akan diteruskan
+              melalui WhatsApp restoran.
+            </p>
+
+            <p>
+              Kamu juga dapat kembali membuka
+              website ini untuk melihat detail
+              dan status pesananmu.
+            </p>
+
+            <p>
+              <strong>
+                Pembayaran dilakukan langsung
+                di kasir.
+              </strong>
+            </p>
+
           </div>
 
-          <div>
-            <label className="form-label">
-              Catatan Pesanan
-            </label>
-
-            <textarea
-              className="form-control"
-              rows="3"
-              placeholder="Contoh: Tidak pakai daun bawang"
-              value={notes}
-              onChange={(e) =>
-                setNotes(e.target.value)
-              }
-            />
-          </div>
         </div>
-      </div>
 
-      {/* Ringkasan pesanan */}
-      <div className="card border-0 shadow-sm mb-4">
-        <div className="card-body">
-          <h5 className="fw-bold mb-3">
-            Ringkasan Pesanan
-          </h5>
 
-          {cartItems.map(
-            (item, index) => (
-              <div
-                key={index}
-                className="border-bottom py-3"
-              >
-                <div className="d-flex justify-content-between">
-                  <div>
-                    <h6 className="fw-bold mb-1">
-                      {item.name}
-                    </h6>
+        {/* =========================
+            CONTENT
+        ========================== */}
 
-                    <p className="text-muted mb-1">
-                      {item.quantity} × Rp{' '}
-                      {Number(
-                        item.price
-                      ).toLocaleString(
-                        'id-ID'
-                      )}
-                    </p>
+        <div className="order-content">
 
-                    {item.variant && (
-                      <p className="mb-1 small">
-                        Variant:{' '}
-                        {item.variant.name}
-                      </p>
-                    )}
+          {/* =========================
+              DATA PELANGGAN
+          ========================== */}
 
-                    {item.addons &&
-                      item.addons.length >
-                        0 && (
-                        <p className="mb-0 small">
-                          Add-on:{' '}
-                          {item.addons
-                            .map(
-                              (addon) =>
-                                addon.name
-                            )
-                            .join(', ')}
-                        </p>
-                      )}
-                  </div>
+          <section className="order-card">
 
-                  <div className="fw-bold">
-                    Rp{' '}
-                    {Number(
-                      item.totalPrice
-                    ).toLocaleString(
-                      'id-ID'
-                    )}
-                  </div>
-                </div>
+            <div className="order-card-header">
+
+              <div>
+
+                <span>
+                  STEP 01
+                </span>
+
+                <h2>
+                  Data Pelanggan
+                </h2>
+
               </div>
-            )
-          )}
 
-          {/* Total */}
-          <div className="d-flex justify-content-between mt-3">
-            <span className="fw-bold">
-              Total Pesanan
-            </span>
+            </div>
 
-            <span className="fw-bold fs-5">
-              Rp{' '}
-              {grandTotal.toLocaleString(
-                'id-ID'
+
+            <div className="order-form">
+
+              {/* NAMA */}
+
+              <div className="order-form-group">
+
+                <label htmlFor="customer-name">
+                  Nama
+                  <span className="required-mark">
+                    *
+                  </span>
+                </label>
+
+                <input
+                  id="customer-name"
+                  type="text"
+                  placeholder="Masukkan nama"
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    setError("");
+                  }}
+                />
+
+                <small className="required-text">
+                  Nama wajib diisi.
+                </small>
+
+              </div>
+
+
+              {/* NOMOR WHATSAPP */}
+
+              <div className="order-form-group">
+
+                <label htmlFor="customer-phone">
+                  Nomor WhatsApp
+                  <span className="required-mark">
+                    *
+                  </span>
+                </label>
+
+                <input
+                  id="customer-phone"
+                  type="tel"
+                  placeholder="Contoh: 081234567890"
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    setError("");
+                  }}
+                />
+
+                <small className="required-text">
+                  Nomor WhatsApp wajib diisi.
+                </small>
+
+              </div>
+
+
+              {/* CATATAN */}
+
+              <div className="order-form-group">
+
+                <label htmlFor="order-notes">
+                  Catatan Pesanan
+                  <span className="optional-mark">
+                    (opsional)
+                  </span>
+                </label>
+
+                <textarea
+                  id="order-notes"
+                  rows="4"
+                  placeholder="Contoh: Tidak pakai daun bawang"
+                  value={notes}
+                  onChange={(e) =>
+                    setNotes(e.target.value)
+                  }
+                />
+
+                <small>
+                  Tambahkan catatan jika ada
+                  permintaan khusus.
+                </small>
+
+              </div>
+
+            </div>
+
+          </section>
+
+
+          {/* =========================
+              RINGKASAN PESANAN
+          ========================== */}
+
+          <section className="order-card">
+
+            <div className="order-card-header order-summary-header">
+
+              <div>
+
+                <span>
+                  STEP 02
+                </span>
+
+                <h2>
+                  Ringkasan Pesanan
+                </h2>
+
+              </div>
+
+              <span className="order-item-count">
+
+                {cartItems.reduce(
+                  (total, item) =>
+                    total + item.quantity,
+                  0
+                )}{" "}
+
+                item
+
+              </span>
+
+            </div>
+
+
+            <div className="order-items">
+
+              {cartItems.map(
+                (item, index) => {
+
+                  const variantPrice =
+                    item.variant
+                      ? Number(
+                          item.variant.price
+                        ) || 0
+                      : 0;
+
+                  const addonPrice =
+                    item.addons
+                      ? item.addons.reduce(
+                          (
+                            total,
+                            addon
+                          ) =>
+                            total +
+                            (Number(
+                              addon.price
+                            ) || 0),
+                          0
+                        )
+                      : 0;
+
+                  const unitPrice =
+                    (Number(
+                      item.price
+                    ) || 0) +
+                    variantPrice +
+                    addonPrice;
+
+                  const itemTotal =
+                    unitPrice *
+                    item.quantity;
+
+                  return (
+                    <div
+                      key={index}
+                      className="order-item"
+                    >
+
+                      <div className="order-item-main">
+
+                        <h3>
+                          {item.name}
+                        </h3>
+
+                        <div className="order-item-price">
+                          {item.quantity} × Rp{" "}
+                          {unitPrice.toLocaleString(
+                            "id-ID"
+                          )}
+                        </div>
+
+
+                        {/* VARIANT */}
+
+                        {item.variant && (
+                          <div className="order-item-option">
+
+                            <span>
+                              Variant
+                            </span>
+
+                            <strong>
+                              {item.variant.name}
+                            </strong>
+
+                          </div>
+                        )}
+
+
+                        {/* ADD-ON */}
+
+                        {item.addons &&
+                          item.addons.length >
+                            0 && (
+                            <div className="order-item-option">
+
+                              <span>
+                                Add-on
+                              </span>
+
+                              <strong>
+                                {item.addons
+                                  .map(
+                                    (addon) =>
+                                      addon.name
+                                  )
+                                  .join(
+                                    ", "
+                                  )}
+                              </strong>
+
+                            </div>
+                          )}
+
+                      </div>
+
+
+                      <div className="order-item-total">
+
+                        Rp{" "}
+                        {itemTotal.toLocaleString(
+                          "id-ID"
+                        )}
+
+                      </div>
+
+                    </div>
+                  );
+                }
               )}
-            </span>
-          </div>
+
+            </div>
+
+
+            {/* =========================
+                TOTAL
+            ========================== */}
+
+            <div className="order-total">
+
+              <div>
+
+                <span>
+                  Total Pesanan
+                </span>
+
+                <small>
+                  Harga sudah termasuk
+                  pilihan menu dan tambahan.
+                </small>
+
+              </div>
+
+              <strong>
+                Rp{" "}
+                {grandTotal.toLocaleString(
+                  "id-ID"
+                )}
+              </strong>
+
+            </div>
+
+          </section>
+
         </div>
+
+
+        {/* =========================
+            ACTION
+        ========================== */}
+
+        <div className="order-actions">
+
+          <Link
+            to="/cart"
+            className="order-secondary-button"
+          >
+            <span>
+              ←
+            </span>
+
+            Kembali
+          </Link>
+
+
+          <button
+            type="button"
+            className="order-primary-button"
+            onClick={handleConfirmOrder}
+            disabled={
+              loading ||
+              !isFormValid
+            }
+          >
+
+            {loading ? (
+              <>
+                <span className="order-spinner" />
+
+                Memproses...
+              </>
+            ) : (
+              <>
+                Konfirmasi Pesanan
+
+                <span>
+                  →
+                </span>
+              </>
+            )}
+
+          </button>
+
+        </div>
+
+
+        {/* =========================
+            FOOTER NOTE
+        ========================== */}
+
+        <p className="order-footer-note">
+
+          <strong>
+            *
+          </strong>{" "}
+
+          Nama dan nomor WhatsApp wajib diisi.
+          Catatan pesanan bersifat opsional.
+
+        </p>
+
       </div>
 
-      {/* Tombol */}
-      <div className="d-flex gap-2">
-        <Link
-          to="/cart"
-          className="btn btn-outline-dark flex-grow-1"
-        >
-          Kembali
-        </Link>
-
-        <button
-          type="button"
-          className="btn btn-dark flex-grow-1"
-          onClick={handleConfirmOrder}
-          disabled={loading}
-        >
-          {loading
-            ? 'Memproses...'
-            : 'Konfirmasi Pesanan'}
-        </button>
-      </div>
-    </div>
+    </main>
   );
 }
 
