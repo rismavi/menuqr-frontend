@@ -1,54 +1,77 @@
-import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useCart } from '../../context/useCart';
+import { useEffect, useState } from "react";
+import { useParams, Link } from "react-router-dom";
+import { useCart } from "../../context/useCart";
 
 import {
   getMenuById,
   getMenuVariants,
   getMenuAddons,
-} from '../../services/menuService';
+} from "../../services/menuService";
 
 function MenuDetailPage() {
   const { id } = useParams();
   const { addToCart } = useCart();
 
   // =========================
-  // AMBIL DATA MEJA
+  // DATA MEJA
   // =========================
 
-  const savedTable = localStorage.getItem('restaurantTable');
+  const [table, setTable] = useState(null);
 
-  const parsedTable = savedTable
-    ? JSON.parse(savedTable)
-    : null;
-
-  const table =
-    parsedTable?.table ||
-    parsedTable?.data ||
-    parsedTable;
+  // =========================
+  // DATA MENU
+  // =========================
 
   const [menu, setMenu] = useState(null);
-
   const [variants, setVariants] = useState([]);
-  const [selectedVariant, setSelectedVariant] =
-    useState(null);
+  const [selectedVariant, setSelectedVariant] = useState(null);
 
   const [addons, setAddons] = useState([]);
-  const [selectedAddons, setSelectedAddons] =
-    useState([]);
+  const [selectedAddons, setSelectedAddons] = useState([]);
 
   const [quantity, setQuantity] = useState(1);
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
-  /* =========================
-     AMBIL DETAIL MENU
-  ========================= */
+  // =========================
+  // AMBIL DATA MEJA
+  // =========================
+
+  useEffect(() => {
+    try {
+      const savedTable = localStorage.getItem("restaurantTable");
+
+      if (!savedTable) {
+        setTable(null);
+        return;
+      }
+
+      const parsedTable = JSON.parse(savedTable);
+
+      const tableData =
+        parsedTable?.table ||
+        parsedTable?.data?.table ||
+        parsedTable?.data ||
+        parsedTable;
+
+      setTable(tableData);
+    } catch (error) {
+      console.error("Gagal membaca data meja:", error);
+      setTable(null);
+    }
+  }, []);
+
+  // =========================
+  // AMBIL DETAIL MENU
+  // =========================
 
   useEffect(() => {
     const fetchMenuDetail = async () => {
       try {
+        setLoading(true);
+        setError("");
+
         const [
           menuData,
           variantData,
@@ -59,48 +82,53 @@ function MenuDetailPage() {
           getMenuAddons(id),
         ]);
 
-        console.log(
-          'Detail menu:',
-          menuData
-        );
+        console.log("Detail menu:", menuData);
+        console.log("Variant menu:", variantData);
+        console.log("Add-on menu:", addonData);
 
-        console.log(
-          'Variant menu:',
-          variantData
-        );
+        // =========================
+        // DATA MENU
+        // =========================
 
-        console.log(
-          'Add-on menu:',
-          addonData
-        );
+        const menuResult =
+          menuData?.data ||
+          menuData;
 
-        setMenu(menuData);
+        setMenu(menuResult);
 
-        if (Array.isArray(variantData)) {
-          setVariants(variantData);
-        } else if (
-          variantData?.data &&
-          Array.isArray(variantData.data)
-        ) {
-          setVariants(variantData.data);
-        }
+        // =========================
+        // DATA VARIANT
+        // =========================
 
-        if (Array.isArray(addonData)) {
-          setAddons(addonData);
-        } else if (
-          addonData?.data &&
-          Array.isArray(addonData.data)
-        ) {
-          setAddons(addonData.data);
-        }
+        const variantResult =
+          Array.isArray(variantData)
+            ? variantData
+            : Array.isArray(variantData?.data)
+              ? variantData.data
+              : [];
+
+        setVariants(variantResult);
+
+        // =========================
+        // DATA ADDON
+        // =========================
+
+        const addonResult =
+          Array.isArray(addonData)
+            ? addonData
+            : Array.isArray(addonData?.data)
+              ? addonData.data
+              : [];
+
+        setAddons(addonResult);
       } catch (err) {
         console.error(
-          'Gagal mengambil detail menu:',
+          "Gagal mengambil detail menu:",
           err
         );
 
         setError(
-          'Gagal mengambil detail menu.'
+          "Gagal mengambil detail menu."
         );
       } finally {
         setLoading(false);
@@ -110,9 +138,9 @@ function MenuDetailPage() {
     fetchMenuDetail();
   }, [id]);
 
-  /* =========================
-     LOADING
-  ========================= */
+  // =========================
+  // LOADING
+  // =========================
 
   if (loading) {
     return (
@@ -130,9 +158,9 @@ function MenuDetailPage() {
     );
   }
 
-  /* =========================
-     ERROR
-  ========================= */
+  // =========================
+  // ERROR
+  // =========================
 
   if (error) {
     return (
@@ -144,6 +172,10 @@ function MenuDetailPage() {
     );
   }
 
+  // =========================
+  // MENU TIDAK DITEMUKAN
+  // =========================
+
   if (!menu) {
     return (
       <div className="container py-5">
@@ -154,18 +186,16 @@ function MenuDetailPage() {
     );
   }
 
-  /* =========================
-     HARGA
-  ========================= */
+  // =========================
+  // HARGA
+  // =========================
 
   const menuPrice =
     Number(menu.price) || 0;
 
   const variantPrice =
     selectedVariant
-      ? Number(
-          selectedVariant.price
-        ) || 0
+      ? Number(selectedVariant.price) || 0
       : 0;
 
   const addonPrice =
@@ -184,9 +214,9 @@ function MenuDetailPage() {
   const totalPrice =
     unitPrice * quantity;
 
-  /* =========================
-     ADD TO CART
-  ========================= */
+  // =========================
+  // ADD TO CART
+  // =========================
 
   const handleAddToCart = () => {
     const cartItem = {
@@ -209,20 +239,20 @@ function MenuDetailPage() {
     };
 
     console.log(
-      'Menu yang ditambahkan ke cart:',
+      "Menu yang ditambahkan ke cart:",
       cartItem
     );
 
     addToCart(cartItem);
 
     alert(
-      'Menu berhasil ditambahkan ke keranjang!'
+      "Menu berhasil ditambahkan ke keranjang!"
     );
   };
 
-  /* =========================
-     ADDON TOGGLE
-  ========================= */
+  // =========================
+  // ADDON TOGGLE
+  // =========================
 
   const handleAddonChange = (
     addon,
@@ -251,7 +281,7 @@ function MenuDetailPage() {
 
       {/* =========================
           HEADER
-      ========================= */}
+      ========================== */}
 
       <div className="detail-top">
         <div className="container">
@@ -260,7 +290,7 @@ function MenuDetailPage() {
             to={
               table?.code
                 ? `/?table=${table.code}`
-                : '/'
+                : "/"
             }
             className="detail-back"
           >
@@ -272,7 +302,7 @@ function MenuDetailPage() {
 
       {/* =========================
           DETAIL CONTENT
-      ========================= */}
+      ========================== */}
 
       <div className="container detail-container">
 
@@ -280,7 +310,7 @@ function MenuDetailPage() {
 
           {/* =========================
               FOTO
-          ========================= */}
+          ========================== */}
 
           <div className="detail-image-wrapper">
 
@@ -306,7 +336,7 @@ function MenuDetailPage() {
 
           {/* =========================
               INFORMASI
-          ========================= */}
+          ========================== */}
 
           <div className="detail-info">
 
@@ -320,19 +350,19 @@ function MenuDetailPage() {
 
             <p className="detail-description">
               {menu.description ||
-                'Menu lezat pilihan kami.'}
+                "Menu lezat pilihan kami."}
             </p>
 
             <div className="detail-price">
-              Rp{' '}
+              Rp{" "}
               {menuPrice.toLocaleString(
-                'id-ID'
+                "id-ID"
               )}
             </div>
 
             {/* =========================
                 VARIANT
-            ========================= */}
+            ========================== */}
 
             {variants.length > 0 && (
               <section className="detail-section">
@@ -357,8 +387,8 @@ function MenuDetailPage() {
                         className={`variant-item ${
                           selectedVariant?.id ===
                           variant.id
-                            ? 'selected'
-                            : ''
+                            ? "selected"
+                            : ""
                         }`}
                         onClick={() =>
                           setSelectedVariant(
@@ -372,6 +402,7 @@ function MenuDetailPage() {
                         </div>
 
                         <div className="variant-info">
+
                           <span className="variant-name">
                             {variant.name}
                           </span>
@@ -383,10 +414,11 @@ function MenuDetailPage() {
                               ? `+ Rp ${Number(
                                   variant.price
                                 ).toLocaleString(
-                                  'id-ID'
+                                  "id-ID"
                                 )}`
-                              : 'Gratis'}
+                              : "Gratis"}
                           </span>
+
                         </div>
 
                       </button>
@@ -400,7 +432,7 @@ function MenuDetailPage() {
 
             {/* =========================
                 ADD-ON
-            ========================= */}
+            ========================== */}
 
             {addons.length > 0 && (
               <section className="detail-section">
@@ -431,16 +463,14 @@ function MenuDetailPage() {
                           key={addon.id}
                           className={`addon-item ${
                             isSelected
-                              ? 'selected'
-                              : ''
+                              ? "selected"
+                              : ""
                           }`}
                         >
 
                           <input
                             type="checkbox"
-                            checked={
-                              isSelected
-                            }
+                            checked={isSelected}
                             onChange={(e) =>
                               handleAddonChange(
                                 addon,
@@ -454,18 +484,20 @@ function MenuDetailPage() {
                           </span>
 
                           <span className="addon-info">
+
                             <span className="addon-name">
                               {addon.name}
                             </span>
 
                             <span className="addon-price">
-                              + Rp{' '}
+                              + Rp{" "}
                               {Number(
                                 addon.price
                               ).toLocaleString(
-                                'id-ID'
+                                "id-ID"
                               )}
                             </span>
+
                           </span>
 
                         </label>
@@ -480,7 +512,7 @@ function MenuDetailPage() {
 
             {/* =========================
                 JUMLAH
-            ========================= */}
+            ========================== */}
 
             <section className="detail-section">
 
@@ -527,7 +559,7 @@ function MenuDetailPage() {
 
             {/* =========================
                 TOTAL
-            ========================= */}
+            ========================== */}
 
             <div className="detail-total">
 
@@ -539,15 +571,15 @@ function MenuDetailPage() {
                 <small>
                   {quantity} item
                   {quantity > 1
-                    ? 's'
-                    : ''}
+                    ? "s"
+                    : ""}
                 </small>
               </div>
 
               <strong>
-                Rp{' '}
+                Rp{" "}
                 {totalPrice.toLocaleString(
-                  'id-ID'
+                  "id-ID"
                 )}
               </strong>
 
@@ -555,7 +587,7 @@ function MenuDetailPage() {
 
             {/* =========================
                 BUTTON CART
-            ========================= */}
+            ========================== */}
 
             <button
               type="button"

@@ -369,12 +369,6 @@ function OrderPage() {
             </p>
 
             <p>
-              Kamu juga dapat kembali membuka
-              website ini untuk melihat detail
-              dan status pesananmu.
-            </p>
-
-            <p>
               <strong>
                 Pembayaran dilakukan langsung
                 di kasir.

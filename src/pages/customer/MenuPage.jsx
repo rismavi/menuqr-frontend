@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import MenuCard from "../../components/customer/MenuCard";
 import { getMenus } from "../../services/menuService";
@@ -7,6 +7,8 @@ import { getCategories } from "../../services/categoryService";
 import { getTableByCode } from "../../services/tableService";
 
 function MenuPage() {
+  const { slug } = useParams();
+
   const [menus, setMenus] = useState([]);
   const [categories, setCategories] = useState([]);
 
@@ -58,7 +60,17 @@ function MenuPage() {
         setTableLoading(true);
         setTableError("");
 
-        const response = await getTableByCode("hoshi-ramen", tableCode);
+        /*
+         * Gunakan slug dari URL.
+         * Jika tidak ada slug, gunakan hoshi-ramen
+         * sebagai fallback.
+         */
+        const restaurantSlug = slug || "hoshi-ramen";
+
+        const response = await getTableByCode(
+          restaurantSlug,
+          tableCode
+        );
 
         const tableData =
           response?.table ||
@@ -70,7 +82,8 @@ function MenuPage() {
 
         /*
          * Simpan data meja supaya tetap bisa digunakan
-         * ketika berpindah halaman Menu → Detail → Cart → Order
+         * ketika berpindah:
+         * Menu → Detail → Cart → Order
          */
         localStorage.setItem(
           "restaurantTable",
@@ -78,6 +91,7 @@ function MenuPage() {
         );
       } catch (error) {
         console.error("Gagal mengambil data meja:", error);
+
         setTableError(
           "Meja tidak ditemukan atau QR Code tidak valid."
         );
@@ -87,7 +101,7 @@ function MenuPage() {
     };
 
     fetchTable();
-  }, []);
+  }, [slug]);
 
   /*
    * =========================
@@ -116,15 +130,10 @@ function MenuPage() {
   /*
    * =========================
    * LINK KEMBALI KE MENU
-   *
-   * Kalau ada meja:
-   * /?table=HOSHI-001
-   *
-   * Jadi nomor meja tidak hilang.
    * =========================
    */
   const menuLink = table?.code
-    ? `/?table=${table.code}`
+    ? `?table=${table.code}`
     : "/";
 
   /*
@@ -171,7 +180,9 @@ function MenuPage() {
               <div className="restaurant-logo">H</div>
 
               <div>
-                <p className="restaurant-label">HOSHI RAMEN</p>
+                <p className="restaurant-label">
+                  HOSHI RAMEN
+                </p>
 
                 <h1 className="restaurant-title">
                   Japanese comfort food.
@@ -225,9 +236,7 @@ function MenuPage() {
       ========================== */}
       <section className="menu-content">
         <div className="container">
-          {/* =========================
-              SEARCH
-          ========================== */}
+          {/* SEARCH */}
           <div className="menu-search-box">
             <span className="menu-search-icon">
               ⌕
@@ -241,9 +250,7 @@ function MenuPage() {
             />
           </div>
 
-          {/* =========================
-              CATEGORY
-          ========================== */}
+          {/* CATEGORY */}
           <div className="menu-category-scroll">
             <button
               type="button"
@@ -278,9 +285,7 @@ function MenuPage() {
             ))}
           </div>
 
-          {/* =========================
-              PROMO
-          ========================== */}
+          {/* PROMO */}
           <section className="menu-promo">
             <div className="menu-promo-content">
               <span className="menu-promo-label">
@@ -304,9 +309,7 @@ function MenuPage() {
             </div>
           </section>
 
-          {/* =========================
-              RECOMMENDED
-          ========================== */}
+          {/* RECOMMENDED */}
           {selectedCategory === "all" &&
             search === "" &&
             recommendedMenus.length > 0 && (
@@ -355,9 +358,7 @@ function MenuPage() {
               </section>
             )}
 
-          {/* =========================
-              ALL MENU
-          ========================== */}
+          {/* ALL MENU */}
           <section
             id="menu"
             className="all-menu-section"
@@ -407,7 +408,6 @@ function MenuPage() {
 
       {/* =========================
           MAIN NAVIGATION
-          MOBILE + DESKTOP
       ========================== */}
       <nav className="mobile-bottom-nav">
         {/* HOME */}

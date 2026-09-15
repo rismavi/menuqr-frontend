@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useCart } from '../../context/useCart';
+import { useEffect, useState } from 'react';
 
 function CartPage() {
   const {
@@ -9,19 +10,37 @@ function CartPage() {
   } = useCart();
 
   // =========================
-  // AMBIL DATA MEJA
+  // DATA MEJA
   // =========================
 
-  const savedTable = localStorage.getItem('restaurantTable');
+  const [table, setTable] = useState(null);
 
-  const parsedTable = savedTable
-    ? JSON.parse(savedTable)
-    : null;
+  useEffect(() => {
+    try {
+      const savedTable = localStorage.getItem('restaurantTable');
 
-  const table =
-    parsedTable?.table ||
-    parsedTable?.data ||
-    parsedTable;
+      if (!savedTable) {
+        return;
+      }
+
+      const parsedTable = JSON.parse(savedTable);
+
+      const tableData =
+        parsedTable?.table ||
+        parsedTable?.data?.table ||
+        parsedTable?.data ||
+        parsedTable;
+
+      setTable(tableData);
+    } catch (error) {
+      console.error(
+        'Gagal membaca data meja:',
+        error
+      );
+
+      setTable(null);
+    }
+  }, []);
 
   // =========================
   // TOTAL
@@ -34,7 +53,8 @@ function CartPage() {
   );
 
   const totalItems = cartItems.reduce(
-    (total, item) => total + item.quantity,
+    (total, item) =>
+      total + (Number(item.quantity) || 0),
     0
   );
 
@@ -246,10 +266,10 @@ function CartPage() {
                                       addon.name
                                   )
                                   .join(', ')}
-                              </strong>
+                            </strong>
 
-                            </div>
-                          )}
+                          </div>
+                        )}
 
                       </div>
 
