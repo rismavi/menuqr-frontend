@@ -1,795 +1,583 @@
+import { useEffect, useMemo, useState } from "react";
 import AdminSidebar from "../../components/admin/AdminSidebar";
 
+import {
+  getAdminMenus,
+  deleteMenu,
+} from "../../services/menuService";
+
+import { getCategories } from "../../services/categoryService";
+import { getRestaurants } from "../../services/restaurantService";
+
 function MenuManagementPage() {
-  const menus = [
-    {
-      id: 1,
-      name: "Spicy Ramen",
-      category: "Makanan",
-      price: "Rp 35.000",
-      status: "Tersedia",
-    },
-    {
-      id: 2,
-      name: "Chicken Ramen",
-      category: "Makanan",
-      price: "Rp 32.000",
-      status: "Tersedia",
-    },
-    {
-      id: 3,
-      name: "Beef Ramen",
-      category: "Makanan",
-      price: "Rp 38.000",
-      status: "Tersedia",
-    },
-    {
-      id: 4,
-      name: "Gyoza",
-      category: "Snack",
-      price: "Rp 22.000",
-      status: "Tersedia",
-    },
-    {
-      id: 5,
-      name: "Ocha",
-      category: "Minuman",
-      price: "Rp 8.000",
-      status: "Habis",
-    },
-  ];
+  const [menus, setMenus] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [restaurants, setRestaurants] = useState([]);
+
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const [menuResponse, categoryResponse, restaurantResponse] =
+        await Promise.all([
+          getAdminMenus(),
+          getCategories(),
+          getRestaurants(),
+        ]);
+
+      setMenus(
+        Array.isArray(menuResponse)
+          ? menuResponse
+          : menuResponse?.data || []
+      );
+
+      setCategories(
+        Array.isArray(categoryResponse)
+          ? categoryResponse
+          : categoryResponse?.data || []
+      );
+
+      setRestaurants(
+        Array.isArray(restaurantResponse)
+          ? restaurantResponse
+          : restaurantResponse?.data || []
+      );
+    } catch (err) {
+      console.error(err);
+      setError(
+        err.response?.data?.message ||
+          "Gagal mengambil data menu. Pastikan backend Laravel sedang berjalan."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getCategoryName = (menu) => {
+    if (menu.category?.name) {
+      return menu.category.name;
+    }
+
+    const category = categories.find(
+      (item) => item.id === menu.category_id
+    );
+
+    return category?.name || "-";
+  };
+
+  const getRestaurantName = (menu) => {
+    if (menu.restaurant?.name) {
+      return menu.restaurant.name;
+    }
+
+    const restaurant = restaurants.find(
+      (item) => item.id === menu.restaurant_id
+    );
+
+    return restaurant?.name || "-";
+  };
+
+  const filteredMenus = useMemo(() => {
+    return menus.filter((menu) => {
+      const keyword = search.toLowerCase().trim();
+
+      const matchesSearch =
+        !keyword ||
+        menu.name?.toLowerCase().includes(keyword) ||
+        menu.description?.toLowerCase().includes(keyword) ||
+        menu.slug?.toLowerCase().includes(keyword);
+
+      const matchesCategory =
+        !categoryFilter ||
+        String(menu.category_id) === String(categoryFilter);
+
+      const matchesStatus =
+        !statusFilter ||
+        (statusFilter === "available" && menu.is_available) ||
+        (statusFilter === "unavailable" && !menu.is_available);
+
+      return matchesSearch && matchesCategory && matchesStatus;
+    });
+  }, [menus, search, categoryFilter, statusFilter]);
+
+  const totalMenus = menus.length;
+
+  const availableMenus = menus.filter(
+    (menu) => menu.is_available
+  ).length;
+
+  const unavailableMenus = menus.filter(
+    (menu) => !menu.is_available
+  ).length;
+
+  const totalCategories = categories.length;
+
+  const categoryComposition = useMemo(() => {
+    const result = {};
+
+    menus.forEach((menu) => {
+      const categoryName = getCategoryName(menu);
+
+      if (!result[categoryName]) {
+        result[categoryName] = 0;
+      }
+
+      result[categoryName]++;
+    });
+
+    return Object.entries(result)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+  }, [menus, categories]);
+
+  const handleDelete = async (menu) => {
+    const confirmed = window.confirm(
+      `Apakah kamu yakin ingin menghapus menu "${menu.name}"?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deleteMenu(menu.id);
+
+      setMenus((currentMenus) =>
+        currentMenus.filter((item) => item.id !== menu.id)
+      );
+    } catch (err) {
+      console.error(err);
+
+      alert(
+        err.response?.data?.message ||
+          "Gagal menghapus menu."
+      );
+    }
+  };
+
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat("id-ID").format(price || 0);
+  };
+
+  if (loading) {
+    return (
+      <div className="admin-layout">
+        <AdminSidebar />
+
+        <main className="admin-main menu-management-page">
+          <div className="admin-loading">
+            <div className="admin-loading-spinner"></div>
+            <p>Memuat data menu...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
-    <div
-      className="admin-layout"
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        backgroundColor: "#f7f5f6",
-      }}
-    >
-      {/* =========================
-          SIDEBAR
-      ========================= */}
-
+    <div className="admin-layout">
       <AdminSidebar />
 
-      {/* =========================
-          MAIN CONTENT
-      ========================= */}
+      <main className="admin-main menu-management-page">
 
-      <main
-        style={{
-          marginLeft: "240px",
-          width: "calc(100% - 240px)",
-          minHeight: "100vh",
-          padding: "32px",
-          boxSizing: "border-box",
-        }}
-      >
-        {/* =========================
-            HEADER
-        ========================= */}
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "28px",
-          }}
-        >
+        {/* ================= HEADER ================= */}
+        <section className="menu-page-header">
           <div>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: "28px",
-                fontWeight: "700",
-                color: "#211b1d",
-              }}
-            >
-              Manajemen Menu
-            </h1>
+            <span className="menu-page-eyebrow">
+              MENU MANAGEMENT
+            </span>
 
-            <p
-              style={{
-                margin: "8px 0 0",
-                color: "#777",
-                fontSize: "14px",
-              }}
-            >
-              Kelola daftar menu makanan dan minuman Hoshi Ramen.
+            <h1>Manajemen Menu</h1>
+
+            <p>
+              Kelola seluruh menu restaurant dari satu tempat.
             </p>
           </div>
 
           <button
             type="button"
-            style={{
-              border: "none",
-              backgroundColor: "#8f2638",
-              color: "#ffffff",
-              padding: "12px 18px",
-              borderRadius: "8px",
-              fontSize: "13px",
-              fontWeight: "600",
-              cursor: "pointer",
-            }}
+            className="menu-add-button"
+            onClick={() => alert("Form tambah menu akan dibuat selanjutnya.")}
           >
-            + Tambah Menu
+            <span>+</span>
+            Tambah Menu
           </button>
-        </div>
+        </section>
 
-        {/* =========================
-            STATISTICS
-        ========================= */}
+        {/* ================= ERROR ================= */}
+        {error && (
+          <div className="menu-error">
+            <strong>Terjadi kesalahan</strong>
+            <span>{error}</span>
+          </div>
+        )}
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: "20px",
-            marginBottom: "24px",
-          }}
-        >
-          {/* TOTAL MENU */}
+        {/* ================= STATISTICS ================= */}
+        <section className="menu-stat-grid">
 
-          <div
-            style={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              padding: "20px",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "13px",
-                color: "#777",
-              }}
-            >
-              Total Menu
-            </span>
+          <div className="menu-stat-card">
+            <div className="menu-stat-icon bowl-icon">
+              🍜
+            </div>
 
-            <h2
-              style={{
-                margin: "8px 0 0",
-                fontSize: "28px",
-                color: "#211b1d",
-              }}
-            >
-              24
-            </h2>
+            <div className="menu-stat-content">
+              <span>Total Menu</span>
+              <strong>{totalMenus}</strong>
+              <small>Semua menu</small>
+            </div>
           </div>
 
-          {/* TERSEDIA */}
+          <div className="menu-stat-card">
+            <div className="menu-stat-icon check-icon">
+              ✓
+            </div>
 
-          <div
-            style={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              padding: "20px",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "13px",
-                color: "#777",
-              }}
-            >
-              Menu Tersedia
-            </span>
-
-            <h2
-              style={{
-                margin: "8px 0 0",
-                fontSize: "28px",
-                color: "#4f8a62",
-              }}
-            >
-              21
-            </h2>
+            <div className="menu-stat-content">
+              <span>Tersedia</span>
+              <strong>{availableMenus}</strong>
+              <small>Menu aktif</small>
+            </div>
           </div>
 
-          {/* MENU HABIS */}
+          <div className="menu-stat-card">
+            <div className="menu-stat-icon warning-icon">
+              !
+            </div>
 
-          <div
-            style={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              padding: "20px",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "13px",
-                color: "#777",
-              }}
-            >
-              Menu Habis
-            </span>
-
-            <h2
-              style={{
-                margin: "8px 0 0",
-                fontSize: "28px",
-                color: "#8f2638",
-              }}
-            >
-              3
-            </h2>
+            <div className="menu-stat-content">
+              <span>Habis</span>
+              <strong>{unavailableMenus}</strong>
+              <small>Tidak tersedia</small>
+            </div>
           </div>
 
-          {/* KATEGORI */}
+          <div className="menu-stat-card">
+            <div className="menu-stat-icon category-icon">
+              ◈
+            </div>
 
-          <div
-            style={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              padding: "20px",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "13px",
-                color: "#777",
-              }}
-            >
-              Total Kategori
+            <div className="menu-stat-content">
+              <span>Kategori</span>
+              <strong>{totalCategories}</strong>
+              <small>Kategori menu</small>
+            </div>
+          </div>
+
+        </section>
+
+        {/* ================= FILTER ================= */}
+        <section className="menu-filter-card">
+
+          <div className="menu-search-box">
+            <span className="menu-search-icon">
+              ⌕
             </span>
 
-            <h2
-              style={{
-                margin: "8px 0 0",
-                fontSize: "28px",
-                color: "#211b1d",
-              }}
-            >
-              4
-            </h2>
+            <input
+              type="text"
+              placeholder="Cari nama atau deskripsi menu..."
+              value={search}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
+            />
           </div>
-        </div>
-
-        {/* =========================
-            SEARCH + FILTER
-        ========================= */}
-
-        <div
-          style={{
-            backgroundColor: "#ffffff",
-            border: "1px solid #eee",
-            borderRadius: "14px",
-            padding: "18px",
-            marginBottom: "20px",
-            display: "flex",
-            gap: "12px",
-          }}
-        >
-          <input
-            type="text"
-            placeholder="Cari nama menu..."
-            style={{
-              flex: 1,
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              padding: "11px 13px",
-              fontSize: "13px",
-              outline: "none",
-            }}
-          />
 
           <select
-            style={{
-              width: "170px",
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              padding: "11px 13px",
-              fontSize: "13px",
-              color: "#555",
-              backgroundColor: "#ffffff",
-              outline: "none",
-            }}
+            value={categoryFilter}
+            onChange={(event) =>
+              setCategoryFilter(event.target.value)
+            }
           >
-            <option>Semua Kategori</option>
-            <option>Makanan</option>
-            <option>Minuman</option>
-            <option>Snack</option>
-            <option>Paket</option>
-          </select>
+            <option value="">Semua Kategori</option>
 
-          <select
-            style={{
-              width: "150px",
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              padding: "11px 13px",
-              fontSize: "13px",
-              color: "#555",
-              backgroundColor: "#ffffff",
-              outline: "none",
-            }}
-          >
-            <option>Semua Status</option>
-            <option>Tersedia</option>
-            <option>Habis</option>
-          </select>
-        </div>
-
-        {/* =========================
-            MENU TABLE
-        ========================= */}
-
-        <div
-          style={{
-            backgroundColor: "#ffffff",
-            border: "1px solid #eee",
-            borderRadius: "14px",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              padding: "20px 22px",
-              borderBottom: "1px solid #eee",
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "18px",
-                color: "#211b1d",
-              }}
-            >
-              Daftar Menu
-            </h2>
-
-            <p
-              style={{
-                margin: "6px 0 0",
-                fontSize: "12px",
-                color: "#888",
-              }}
-            >
-              Kelola informasi menu restoran.
-            </p>
-          </div>
-
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "collapse",
-            }}
-          >
-            <thead>
-              <tr
-                style={{
-                  backgroundColor: "#faf9f9",
-                  textAlign: "left",
-                }}
+            {categories.map((category) => (
+              <option
+                key={category.id}
+                value={category.id}
               >
-                <th style={tableHeaderStyle}>Menu</th>
-                <th style={tableHeaderStyle}>Kategori</th>
-                <th style={tableHeaderStyle}>Harga</th>
-                <th style={tableHeaderStyle}>Status</th>
-                <th
-                  style={{
-                    ...tableHeaderStyle,
-                    textAlign: "center",
-                  }}
-                >
-                  Aksi
-                </th>
-              </tr>
-            </thead>
+                {category.name}
+              </option>
+            ))}
+          </select>
 
-            <tbody>
-              {menus.map((menu) => (
-                <tr key={menu.id}>
-                  <td style={tableCellStyle}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "12px",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: "48px",
-                          height: "48px",
-                          borderRadius: "8px",
-                          backgroundColor: "#f4e8eb",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "#8f2638",
-                          fontSize: "11px",
-                          fontWeight: "600",
-                          flexShrink: 0,
-                        }}
-                      >
-                        Foto
-                      </div>
+          <select
+            value={statusFilter}
+            onChange={(event) =>
+              setStatusFilter(event.target.value)
+            }
+          >
+            <option value="">Semua Status</option>
+            <option value="available">Tersedia</option>
+            <option value="unavailable">Habis</option>
+          </select>
 
-                      <div>
-                        <strong
-                          style={{
-                            display: "block",
-                            fontSize: "13px",
-                            color: "#211b1d",
-                          }}
-                        >
-                          {menu.name}
-                        </strong>
+        </section>
 
-                        <span
-                          style={{
-                            fontSize: "11px",
-                            color: "#999",
-                          }}
-                        >
-                          ID Menu #{menu.id}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
+        {/* ================= MENU TABLE ================= */}
+        <section className="menu-list-card">
 
-                  <td style={tableCellStyle}>
-                    <span
-                      style={{
-                        fontSize: "12px",
-                        color: "#555",
-                      }}
-                    >
-                      {menu.category}
-                    </span>
-                  </td>
+          <div className="menu-list-header">
+            <div>
+              <span className="menu-list-eyebrow">
+                MENU LIST
+              </span>
 
-                  <td style={tableCellStyle}>
-                    <strong
-                      style={{
-                        fontSize: "13px",
-                        color: "#211b1d",
-                      }}
-                    >
-                      {menu.price}
-                    </strong>
-                  </td>
+              <h2>Daftar Menu</h2>
+            </div>
 
-                  <td style={tableCellStyle}>
-                    <span
-                      style={{
-                        display: "inline-block",
-                        padding: "6px 10px",
-                        borderRadius: "6px",
-                        fontSize: "10px",
-                        fontWeight: "600",
-                        backgroundColor:
-                          menu.status === "Tersedia"
-                            ? "#e9f5ec"
-                            : "#f8e8eb",
-                        color:
-                          menu.status === "Tersedia"
-                            ? "#4f8a62"
-                            : "#8f2638",
-                      }}
-                    >
-                      {menu.status}
-                    </span>
-                  </td>
+            <span className="menu-count-badge">
+              {filteredMenus.length} menu
+            </span>
+          </div>
 
-                  <td
-                    style={{
-                      ...tableCellStyle,
-                      textAlign: "center",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "center",
-                        gap: "8px",
-                      }}
-                    >
-                      <button
-                        type="button"
-                        style={actionButtonStyle}
-                      >
-                        Edit
-                      </button>
+          <div className="menu-table-wrapper">
+            <table className="menu-table">
 
-                      <button
-                        type="button"
-                        style={{
-                          ...actionButtonStyle,
-                          color: "#8f2638",
-                        }}
-                      >
-                        Hapus
-                      </button>
-                    </div>
-                  </td>
+              <thead>
+                <tr>
+                  <th>MENU</th>
+                  <th>KATEGORI</th>
+                  <th>HARGA</th>
+                  <th>STATUS</th>
+                  <th>RESTAURANT</th>
+                  <th>AKSI</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
 
-        {/* =========================
-            BOTTOM INFORMATION
-        ========================= */}
+              <tbody>
+                {filteredMenus.length > 0 ? (
+                  filteredMenus.map((menu) => (
+                    <tr key={menu.id}>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "20px",
-            marginTop: "24px",
-          }}
-        >
-          {/* KOMPOSISI KATEGORI */}
+                      {/* MENU */}
+                      <td>
+                        <div className="menu-info">
 
-          <div
-            style={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              padding: "22px",
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "17px",
-                color: "#211b1d",
-              }}
-            >
-              Komposisi Kategori
-            </h2>
+                          {menu.image_url ? (
+                            <img
+                              src={menu.image_url}
+                              alt={menu.name}
+                              className="menu-image"
+                            />
+                          ) : (
+                            <div className="menu-image-placeholder">
+                              🍜
+                            </div>
+                          )}
 
-            <p
-              style={{
-                margin: "6px 0 18px",
-                fontSize: "12px",
-                color: "#888",
-              }}
-            >
-              Jumlah menu berdasarkan kategori.
-            </p>
+                          <div className="menu-info-text">
+                            <strong>
+                              {menu.name}
+                            </strong>
 
-            <CategoryRow
-              name="Makanan"
-              total="12 menu"
-              percentage="50%"
-            />
+                            <span>
+                              {menu.slug || "-"}
+                            </span>
+                          </div>
 
-            <CategoryRow
-              name="Minuman"
-              total="5 menu"
-              percentage="21%"
-            />
+                        </div>
+                      </td>
 
-            <CategoryRow
-              name="Snack"
-              total="4 menu"
-              percentage="17%"
-            />
+                      {/* KATEGORI */}
+                      <td>
+                        <span className="category-badge">
+                          {getCategoryName(menu)}
+                        </span>
+                      </td>
 
-            <CategoryRow
-              name="Paket"
-              total="3 menu"
-              percentage="12%"
-            />
+                      {/* HARGA */}
+                      <td>
+                        <strong className="menu-price">
+                          Rp {formatPrice(menu.price)}
+                        </strong>
+                      </td>
+
+                      {/* STATUS */}
+                      <td>
+                        {menu.is_available ? (
+                          <span className="status-badge status-available">
+                            <span className="status-dot"></span>
+                            Tersedia
+                          </span>
+                        ) : (
+                          <span className="status-badge status-unavailable">
+                            <span className="status-dot"></span>
+                            Habis
+                          </span>
+                        )}
+                      </td>
+
+                      {/* RESTAURANT */}
+                      <td>
+                        <span className="restaurant-name">
+                          {getRestaurantName(menu)}
+                        </span>
+                      </td>
+
+                      {/* ACTION */}
+                      <td>
+                        <div className="menu-actions">
+
+                          <button
+                            type="button"
+                            className="menu-edit-button"
+                            onClick={() =>
+                              alert(
+                                `Edit menu "${menu.name}" akan dibuat selanjutnya.`
+                              )
+                            }
+                          >
+                            <span>✎</span>
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            className="menu-delete-button"
+                            onClick={() =>
+                              handleDelete(menu)
+                            }
+                          >
+                            <span>♜</span>
+                            Hapus
+                          </button>
+
+                        </div>
+                      </td>
+
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6">
+                      <div className="menu-empty-state">
+                        <div className="menu-empty-icon">
+                          🍜
+                        </div>
+
+                        <h3>Menu tidak ditemukan</h3>
+
+                        <p>
+                          Tidak ada menu yang sesuai
+                          dengan pencarian atau filter.
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+
+            </table>
+          </div>
+        </section>
+
+        {/* ================= BOTTOM INFORMATION ================= */}
+        <section className="menu-bottom-grid">
+
+          {/* CATEGORY COMPOSITION */}
+          <div className="menu-bottom-card">
+
+            <div className="menu-bottom-header">
+              <div>
+                <span>KATEGORI</span>
+                <h3>Komposisi Menu</h3>
+              </div>
+            </div>
+
+            {categoryComposition.length > 0 ? (
+              <div className="category-composition">
+
+                {categoryComposition.map(
+                  ([categoryName, total]) => {
+                    const percentage =
+                      totalMenus > 0
+                        ? (total / totalMenus) * 100
+                        : 0;
+
+                    return (
+                      <div
+                        className="composition-item"
+                        key={categoryName}
+                      >
+                        <div className="composition-top">
+                          <span>{categoryName}</span>
+                          <strong>{total}</strong>
+                        </div>
+
+                        <div className="composition-bar">
+                          <div
+                            className="composition-bar-fill"
+                            style={{
+                              width: `${percentage}%`,
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                    );
+                  }
+                )}
+
+              </div>
+            ) : (
+              <div className="small-empty">
+                Belum ada data kategori.
+              </div>
+            )}
+
           </div>
 
-          {/* KETERSEDIAAN */}
+          {/* QUICK SUMMARY */}
+          <div className="menu-bottom-card">
 
-          <div
-            style={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              padding: "22px",
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "17px",
-                color: "#211b1d",
-              }}
-            >
-              Ketersediaan Menu
-            </h2>
-
-            <p
-              style={{
-                margin: "6px 0 18px",
-                fontSize: "12px",
-                color: "#888",
-              }}
-            >
-              Kondisi menu saat ini.
-            </p>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "13px 0",
-                borderBottom: "1px solid #eee",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "13px",
-                  color: "#555",
-                }}
-              >
-                Menu tersedia
-              </span>
-
-              <strong
-                style={{
-                  color: "#4f8a62",
-                  fontSize: "15px",
-                }}
-              >
-                21
-              </strong>
+            <div className="menu-bottom-header">
+              <div>
+                <span>OVERVIEW</span>
+                <h3>Ringkasan Menu</h3>
+              </div>
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "13px 0",
-                borderBottom: "1px solid #eee",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "13px",
-                  color: "#555",
-                }}
-              >
-                Menu habis
-              </span>
+            <div className="menu-overview">
 
-              <strong
-                style={{
-                  color: "#8f2638",
-                  fontSize: "15px",
-                }}
-              >
-                3
-              </strong>
+              <div className="overview-row">
+                <span>Total menu</span>
+                <strong>{totalMenus}</strong>
+              </div>
+
+              <div className="overview-row">
+                <span>Menu tersedia</span>
+                <strong>{availableMenus}</strong>
+              </div>
+
+              <div className="overview-row">
+                <span>Menu habis</span>
+                <strong>{unavailableMenus}</strong>
+              </div>
+
+              <div className="overview-row">
+                <span>Kategori</span>
+                <strong>{totalCategories}</strong>
+              </div>
+
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "13px 0",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "13px",
-                  color: "#555",
-                }}
-              >
-                Rata-rata harga
-              </span>
-
-              <strong
-                style={{
-                  color: "#211b1d",
-                  fontSize: "15px",
-                }}
-              >
-                Rp 28.000
-              </strong>
-            </div>
           </div>
-        </div>
+
+        </section>
+
       </main>
-    </div>
-  );
-}
-
-/* =========================
-    TABLE STYLE
-========================= */
-
-const tableHeaderStyle = {
-  padding: "14px 18px",
-  fontSize: "11px",
-  color: "#888",
-  fontWeight: "600",
-  borderBottom: "1px solid #eee",
-};
-
-const tableCellStyle = {
-  padding: "16px 18px",
-  borderBottom: "1px solid #eee",
-  fontSize: "13px",
-};
-
-/* =========================
-    ACTION BUTTON
-========================= */
-
-const actionButtonStyle = {
-  border: "none",
-  backgroundColor: "#f7f5f6",
-  color: "#555",
-  padding: "7px 10px",
-  borderRadius: "6px",
-  fontSize: "10px",
-  fontWeight: "600",
-  cursor: "pointer",
-};
-
-/* =========================
-    CATEGORY ROW
-========================= */
-
-function CategoryRow({ name, total, percentage }) {
-  return (
-    <div
-      style={{
-        marginBottom: "15px",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginBottom: "6px",
-        }}
-      >
-        <span
-          style={{
-            fontSize: "12px",
-            color: "#555",
-          }}
-        >
-          {name}
-        </span>
-
-        <span
-          style={{
-            fontSize: "11px",
-            color: "#888",
-          }}
-        >
-          {total}
-        </span>
-      </div>
-
-      <div
-        style={{
-          height: "7px",
-          backgroundColor: "#eee",
-          borderRadius: "10px",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            width: percentage,
-            height: "100%",
-            backgroundColor: "#8f2638",
-            borderRadius: "10px",
-          }}
-        ></div>
-      </div>
     </div>
   );
 }

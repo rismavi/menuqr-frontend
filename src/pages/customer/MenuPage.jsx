@@ -236,7 +236,9 @@ function MenuPage() {
       ========================== */}
       <section className="menu-content">
         <div className="container">
-          {/* SEARCH */}
+          {/* =========================
+              SEARCH
+          ========================== */}
           <div className="menu-search-box">
             <span className="menu-search-icon">
               ⌕
@@ -250,7 +252,9 @@ function MenuPage() {
             />
           </div>
 
-          {/* CATEGORY */}
+          {/* =========================
+              CATEGORY
+          ========================== */}
           <div className="menu-category-scroll">
             <button
               type="button"
@@ -285,23 +289,29 @@ function MenuPage() {
             ))}
           </div>
 
-          {/* PROMO */}
+          {/* =========================
+              PROMO
+          ========================== */}
           <section className="menu-promo">
             <div className="menu-promo-content">
               <span className="menu-promo-label">
-                TODAY'S SPECIAL
+                PROMO HARI INI
               </span>
 
               <h2>
-                Find your
+                Nikmati ramen
                 <br />
-                favorite bowl.
+                favoritmu lebih hemat.
               </h2>
 
               <p>
-                Nikmati pilihan ramen dan menu
-                Jepang favorit kami.
+                Dapatkan diskon 20% untuk pembelian
+                minimal Rp50.000.
               </p>
+
+              <div className="menu-promo-code">
+                KODE: <strong>RAMEN20</strong>
+              </div>
             </div>
 
             <div className="menu-promo-decoration">
@@ -309,7 +319,9 @@ function MenuPage() {
             </div>
           </section>
 
-          {/* RECOMMENDED */}
+          {/* =========================
+              RECOMMENDED
+          ========================== */}
           {selectedCategory === "all" &&
             search === "" &&
             recommendedMenus.length > 0 && (
@@ -358,7 +370,9 @@ function MenuPage() {
               </section>
             )}
 
-          {/* ALL MENU */}
+          {/* =========================
+              ALL MENU
+          ========================== */}
           <section
             id="menu"
             className="all-menu-section"
