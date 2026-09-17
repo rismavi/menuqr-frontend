@@ -3,6 +3,8 @@ import AdminSidebar from "../../components/admin/AdminSidebar";
 
 import {
   getAdminMenus,
+  createMenu,
+  updateMenu,
   deleteMenu,
 } from "../../services/menuService";
 
@@ -10,16 +12,71 @@ import { getCategories } from "../../services/categoryService";
 import { getRestaurants } from "../../services/restaurantService";
 
 function MenuManagementPage() {
+  // =========================================================
+  // DATA
+  // =========================================================
+
   const [menus, setMenus] = useState([]);
   const [categories, setCategories] = useState([]);
   const [restaurants, setRestaurants] = useState([]);
+
+  // =========================================================
+  // FILTER
+  // =========================================================
 
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
+  // =========================================================
+  // LOADING & ERROR
+  // =========================================================
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // =========================================================
+  // TAMBAH MENU
+  // =========================================================
+
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  const [formData, setFormData] = useState({
+    restaurant_id: "",
+    category_id: "",
+    name: "",
+    slug: "",
+    description: "",
+    price: "",
+    image: null,
+    is_available: true,
+    sort_order: 0,
+  });
+
+  // =========================================================
+  // EDIT MENU
+  // =========================================================
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingMenu, setEditingMenu] = useState(null);
+
+  const [editFormData, setEditFormData] = useState({
+    restaurant_id: "",
+    category_id: "",
+    name: "",
+    slug: "",
+    description: "",
+    price: "",
+    image: null,
+    is_available: true,
+    sort_order: 0,
+  });
+
+  // =========================================================
+  // LOAD DATA
+  // =========================================================
 
   useEffect(() => {
     loadData();
@@ -56,6 +113,7 @@ function MenuManagementPage() {
       );
     } catch (err) {
       console.error(err);
+
       setError(
         err.response?.data?.message ||
           "Gagal mengambil data menu. Pastikan backend Laravel sedang berjalan."
@@ -64,6 +122,10 @@ function MenuManagementPage() {
       setLoading(false);
     }
   };
+
+  // =========================================================
+  // HELPER
+  // =========================================================
 
   const getCategoryName = (menu) => {
     if (menu.category?.name) {
@@ -89,6 +151,23 @@ function MenuManagementPage() {
     return restaurant?.name || "-";
   };
 
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat("id-ID").format(price || 0);
+  };
+
+  const createSlug = (text) => {
+    return text
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-");
+  };
+
+  // =========================================================
+  // FILTER MENU
+  // =========================================================
+
   const filteredMenus = useMemo(() => {
     return menus.filter((menu) => {
       const keyword = search.toLowerCase().trim();
@@ -112,6 +191,10 @@ function MenuManagementPage() {
     });
   }, [menus, search, categoryFilter, statusFilter]);
 
+  // =========================================================
+  // STATISTICS
+  // =========================================================
+
   const totalMenus = menus.length;
 
   const availableMenus = menus.filter(
@@ -123,6 +206,10 @@ function MenuManagementPage() {
   ).length;
 
   const totalCategories = categories.length;
+
+  // =========================================================
+  // CATEGORY COMPOSITION
+  // =========================================================
 
   const categoryComposition = useMemo(() => {
     const result = {};
@@ -142,6 +229,419 @@ function MenuManagementPage() {
       .slice(0, 5);
   }, [menus, categories]);
 
+  // =========================================================
+  // TAMBAH MENU
+  // =========================================================
+
+  const handleOpenCreateModal = () => {
+    setFormError("");
+
+    setFormData({
+      restaurant_id:
+        restaurants.length === 1
+          ? restaurants[0].id
+          : "",
+      category_id: "",
+      name: "",
+      slug: "",
+      description: "",
+      price: "",
+      image: null,
+      is_available: true,
+      sort_order: 0,
+    });
+
+    setShowCreateModal(true);
+  };
+
+  const handleCloseCreateModal = () => {
+    if (saving) {
+      return;
+    }
+
+    setShowCreateModal(false);
+    setFormError("");
+  };
+
+  const handleFormChange = (event) => {
+    const {
+      name,
+      value,
+      type,
+      checked,
+      files,
+    } = event.target;
+
+    if (name === "name") {
+      setFormData((current) => ({
+        ...current,
+        name: value,
+        slug: createSlug(value),
+      }));
+
+      return;
+    }
+
+    if (name === "image") {
+      setFormData((current) => ({
+        ...current,
+        image: files?.[0] || null,
+      }));
+
+      return;
+    }
+
+    if (type === "checkbox") {
+      setFormData((current) => ({
+        ...current,
+        [name]: checked,
+      }));
+
+      return;
+    }
+
+    setFormData((current) => ({
+      ...current,
+      [name]: value,
+    }));
+  };
+
+  const handleCreateMenu = async (event) => {
+    event.preventDefault();
+
+    setFormError("");
+
+    if (!formData.restaurant_id) {
+      setFormError("Silakan pilih restaurant.");
+      return;
+    }
+
+    if (!formData.category_id) {
+      setFormError("Silakan pilih kategori menu.");
+      return;
+    }
+
+    if (!formData.name.trim()) {
+      setFormError("Nama menu wajib diisi.");
+      return;
+    }
+
+    if (!formData.price || Number(formData.price) < 0) {
+      setFormError("Harga menu wajib diisi dengan benar.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const data = new FormData();
+
+      data.append(
+        "restaurant_id",
+        formData.restaurant_id
+      );
+
+      data.append(
+        "category_id",
+        formData.category_id
+      );
+
+      data.append(
+        "name",
+        formData.name.trim()
+      );
+
+      data.append(
+        "slug",
+        formData.slug || createSlug(formData.name)
+      );
+
+      data.append(
+        "description",
+        formData.description || ""
+      );
+
+      data.append(
+        "price",
+        Number(formData.price)
+      );
+
+      data.append(
+        "is_available",
+        formData.is_available ? "1" : "0"
+      );
+
+      data.append(
+        "sort_order",
+        Number(formData.sort_order) || 0
+      );
+
+      if (formData.image) {
+        data.append("image", formData.image);
+      }
+
+      await createMenu(data);
+
+      setShowCreateModal(false);
+
+      setFormData({
+        restaurant_id: "",
+        category_id: "",
+        name: "",
+        slug: "",
+        description: "",
+        price: "",
+        image: null,
+        is_available: true,
+        sort_order: 0,
+      });
+
+      await loadData();
+
+      alert("Menu berhasil ditambahkan!");
+    } catch (err) {
+      console.error(err);
+
+      const backendErrors =
+        err.response?.data?.errors;
+
+      if (backendErrors) {
+        const firstError = Object.values(
+          backendErrors
+        )
+          .flat()
+          .find(Boolean);
+
+        setFormError(
+          firstError || "Gagal menambahkan menu."
+        );
+      } else {
+        setFormError(
+          err.response?.data?.message ||
+            "Gagal menambahkan menu."
+        );
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // =========================================================
+  // EDIT MENU
+  // =========================================================
+
+  const handleOpenEditModal = (menu) => {
+    setFormError("");
+    setEditingMenu(menu);
+
+    setEditFormData({
+      restaurant_id:
+        menu.restaurant_id ||
+        menu.restaurant?.id ||
+        "",
+      category_id:
+        menu.category_id ||
+        menu.category?.id ||
+        "",
+      name: menu.name || "",
+      slug: menu.slug || "",
+      description: menu.description || "",
+      price: menu.price || "",
+      image: null,
+      is_available: Boolean(menu.is_available),
+      sort_order: menu.sort_order || 0,
+    });
+
+    setShowEditModal(true);
+  };
+
+  const handleCloseEditModal = () => {
+    if (saving) {
+      return;
+    }
+
+    setShowEditModal(false);
+    setEditingMenu(null);
+    setFormError("");
+
+    setEditFormData({
+      restaurant_id: "",
+      category_id: "",
+      name: "",
+      slug: "",
+      description: "",
+      price: "",
+      image: null,
+      is_available: true,
+      sort_order: 0,
+    });
+  };
+
+  const handleEditFormChange = (event) => {
+    const {
+      name,
+      value,
+      type,
+      checked,
+      files,
+    } = event.target;
+
+    if (name === "name") {
+      setEditFormData((current) => ({
+        ...current,
+        name: value,
+        slug: createSlug(value),
+      }));
+
+      return;
+    }
+
+    if (name === "image") {
+      setEditFormData((current) => ({
+        ...current,
+        image: files?.[0] || null,
+      }));
+
+      return;
+    }
+
+    if (type === "checkbox") {
+      setEditFormData((current) => ({
+        ...current,
+        [name]: checked,
+      }));
+
+      return;
+    }
+
+    setEditFormData((current) => ({
+      ...current,
+      [name]: value,
+    }));
+  };
+
+  const handleUpdateMenu = async (event) => {
+    event.preventDefault();
+
+    setFormError("");
+
+    if (!editingMenu) {
+      return;
+    }
+
+    if (!editFormData.restaurant_id) {
+      setFormError("Silakan pilih restaurant.");
+      return;
+    }
+
+    if (!editFormData.category_id) {
+      setFormError("Silakan pilih kategori menu.");
+      return;
+    }
+
+    if (!editFormData.name.trim()) {
+      setFormError("Nama menu wajib diisi.");
+      return;
+    }
+
+    if (
+      editFormData.price === "" ||
+      Number(editFormData.price) < 0
+    ) {
+      setFormError("Harga menu wajib diisi dengan benar.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const data = new FormData();
+
+      data.append(
+        "restaurant_id",
+        editFormData.restaurant_id
+      );
+
+      data.append(
+        "category_id",
+        editFormData.category_id
+      );
+
+      data.append(
+        "name",
+        editFormData.name.trim()
+      );
+
+      data.append(
+        "slug",
+        editFormData.slug ||
+          createSlug(editFormData.name)
+      );
+
+      data.append(
+        "description",
+        editFormData.description || ""
+      );
+
+      data.append(
+        "price",
+        Number(editFormData.price)
+      );
+
+      data.append(
+        "is_available",
+        editFormData.is_available ? "1" : "0"
+      );
+
+      data.append(
+        "sort_order",
+        Number(editFormData.sort_order) || 0
+      );
+
+      // Foto hanya dikirim jika user memilih foto baru
+      if (editFormData.image) {
+        data.append("image", editFormData.image);
+      }
+
+      await updateMenu(editingMenu.id, data);
+
+      setShowEditModal(false);
+      setEditingMenu(null);
+
+      await loadData();
+
+      alert("Menu berhasil diperbarui!");
+    } catch (err) {
+      console.error(err);
+
+      const backendErrors =
+        err.response?.data?.errors;
+
+      if (backendErrors) {
+        const firstError = Object.values(
+          backendErrors
+        )
+          .flat()
+          .find(Boolean);
+
+        setFormError(
+          firstError || "Gagal memperbarui menu."
+        );
+      } else {
+        setFormError(
+          err.response?.data?.message ||
+            "Gagal memperbarui menu."
+        );
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // =========================================================
+  // HAPUS MENU
+  // =========================================================
+
   const handleDelete = async (menu) => {
     const confirmed = window.confirm(
       `Apakah kamu yakin ingin menghapus menu "${menu.name}"?`
@@ -155,8 +655,12 @@ function MenuManagementPage() {
       await deleteMenu(menu.id);
 
       setMenus((currentMenus) =>
-        currentMenus.filter((item) => item.id !== menu.id)
+        currentMenus.filter(
+          (item) => item.id !== menu.id
+        )
       );
+
+      alert("Menu berhasil dihapus!");
     } catch (err) {
       console.error(err);
 
@@ -167,9 +671,9 @@ function MenuManagementPage() {
     }
   };
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat("id-ID").format(price || 0);
-  };
+  // =========================================================
+  // LOADING
+  // =========================================================
 
   if (loading) {
     return (
@@ -186,6 +690,10 @@ function MenuManagementPage() {
     );
   }
 
+  // =========================================================
+  // MAIN PAGE
+  // =========================================================
+
   return (
     <div className="admin-layout">
       <AdminSidebar />
@@ -193,6 +701,7 @@ function MenuManagementPage() {
       <main className="admin-main menu-management-page">
 
         {/* ================= HEADER ================= */}
+
         <section className="menu-page-header">
           <div>
             <span className="menu-page-eyebrow">
@@ -209,7 +718,7 @@ function MenuManagementPage() {
           <button
             type="button"
             className="menu-add-button"
-            onClick={() => alert("Form tambah menu akan dibuat selanjutnya.")}
+            onClick={handleOpenCreateModal}
           >
             <span>+</span>
             Tambah Menu
@@ -217,6 +726,7 @@ function MenuManagementPage() {
         </section>
 
         {/* ================= ERROR ================= */}
+
         {error && (
           <div className="menu-error">
             <strong>Terjadi kesalahan</strong>
@@ -225,6 +735,7 @@ function MenuManagementPage() {
         )}
 
         {/* ================= STATISTICS ================= */}
+
         <section className="menu-stat-grid">
 
           <div className="menu-stat-card">
@@ -278,6 +789,7 @@ function MenuManagementPage() {
         </section>
 
         {/* ================= FILTER ================= */}
+
         <section className="menu-filter-card">
 
           <div className="menu-search-box">
@@ -301,7 +813,9 @@ function MenuManagementPage() {
               setCategoryFilter(event.target.value)
             }
           >
-            <option value="">Semua Kategori</option>
+            <option value="">
+              Semua Kategori
+            </option>
 
             {categories.map((category) => (
               <option
@@ -319,14 +833,23 @@ function MenuManagementPage() {
               setStatusFilter(event.target.value)
             }
           >
-            <option value="">Semua Status</option>
-            <option value="available">Tersedia</option>
-            <option value="unavailable">Habis</option>
+            <option value="">
+              Semua Status
+            </option>
+
+            <option value="available">
+              Tersedia
+            </option>
+
+            <option value="unavailable">
+              Habis
+            </option>
           </select>
 
         </section>
 
         {/* ================= MENU TABLE ================= */}
+
         <section className="menu-list-card">
 
           <div className="menu-list-header">
@@ -358,11 +881,15 @@ function MenuManagementPage() {
               </thead>
 
               <tbody>
+
                 {filteredMenus.length > 0 ? (
+
                   filteredMenus.map((menu) => (
+
                     <tr key={menu.id}>
 
                       {/* MENU */}
+
                       <td>
                         <div className="menu-info">
 
@@ -379,6 +906,7 @@ function MenuManagementPage() {
                           )}
 
                           <div className="menu-info-text">
+
                             <strong>
                               {menu.name}
                             </strong>
@@ -386,12 +914,14 @@ function MenuManagementPage() {
                             <span>
                               {menu.slug || "-"}
                             </span>
+
                           </div>
 
                         </div>
                       </td>
 
                       {/* KATEGORI */}
+
                       <td>
                         <span className="category-badge">
                           {getCategoryName(menu)}
@@ -399,6 +929,7 @@ function MenuManagementPage() {
                       </td>
 
                       {/* HARGA */}
+
                       <td>
                         <strong className="menu-price">
                           Rp {formatPrice(menu.price)}
@@ -406,21 +937,27 @@ function MenuManagementPage() {
                       </td>
 
                       {/* STATUS */}
+
                       <td>
                         {menu.is_available ? (
+
                           <span className="status-badge status-available">
                             <span className="status-dot"></span>
                             Tersedia
                           </span>
+
                         ) : (
+
                           <span className="status-badge status-unavailable">
                             <span className="status-dot"></span>
                             Habis
                           </span>
+
                         )}
                       </td>
 
                       {/* RESTAURANT */}
+
                       <td>
                         <span className="restaurant-name">
                           {getRestaurantName(menu)}
@@ -428,6 +965,7 @@ function MenuManagementPage() {
                       </td>
 
                       {/* ACTION */}
+
                       <td>
                         <div className="menu-actions">
 
@@ -435,9 +973,7 @@ function MenuManagementPage() {
                             type="button"
                             className="menu-edit-button"
                             onClick={() =>
-                              alert(
-                                `Edit menu "${menu.name}" akan dibuat selanjutnya.`
-                              )
+                              handleOpenEditModal(menu)
                             }
                           >
                             <span>✎</span>
@@ -459,35 +995,49 @@ function MenuManagementPage() {
                       </td>
 
                     </tr>
+
                   ))
+
                 ) : (
+
                   <tr>
                     <td colSpan="6">
+
                       <div className="menu-empty-state">
+
                         <div className="menu-empty-icon">
                           🍜
                         </div>
 
-                        <h3>Menu tidak ditemukan</h3>
+                        <h3>
+                          Menu tidak ditemukan
+                        </h3>
 
                         <p>
                           Tidak ada menu yang sesuai
                           dengan pencarian atau filter.
                         </p>
+
                       </div>
+
                     </td>
                   </tr>
+
                 )}
+
               </tbody>
 
             </table>
           </div>
+
         </section>
 
         {/* ================= BOTTOM INFORMATION ================= */}
+
         <section className="menu-bottom-grid">
 
           {/* CATEGORY COMPOSITION */}
+
           <div className="menu-bottom-card">
 
             <div className="menu-bottom-header">
@@ -498,10 +1048,12 @@ function MenuManagementPage() {
             </div>
 
             {categoryComposition.length > 0 ? (
+
               <div className="category-composition">
 
                 {categoryComposition.map(
                   ([categoryName, total]) => {
+
                     const percentage =
                       totalMenus > 0
                         ? (total / totalMenus) * 100
@@ -512,34 +1064,47 @@ function MenuManagementPage() {
                         className="composition-item"
                         key={categoryName}
                       >
+
                         <div className="composition-top">
-                          <span>{categoryName}</span>
-                          <strong>{total}</strong>
+                          <span>
+                            {categoryName}
+                          </span>
+
+                          <strong>
+                            {total}
+                          </strong>
                         </div>
 
                         <div className="composition-bar">
+
                           <div
                             className="composition-bar-fill"
                             style={{
                               width: `${percentage}%`,
                             }}
                           ></div>
+
                         </div>
+
                       </div>
                     );
                   }
                 )}
 
               </div>
+
             ) : (
+
               <div className="small-empty">
                 Belum ada data kategori.
               </div>
+
             )}
 
           </div>
 
           {/* QUICK SUMMARY */}
+
           <div className="menu-bottom-card">
 
             <div className="menu-bottom-header">
@@ -553,22 +1118,30 @@ function MenuManagementPage() {
 
               <div className="overview-row">
                 <span>Total menu</span>
-                <strong>{totalMenus}</strong>
+                <strong>
+                  {totalMenus}
+                </strong>
               </div>
 
               <div className="overview-row">
                 <span>Menu tersedia</span>
-                <strong>{availableMenus}</strong>
+                <strong>
+                  {availableMenus}
+                </strong>
               </div>
 
               <div className="overview-row">
                 <span>Menu habis</span>
-                <strong>{unavailableMenus}</strong>
+                <strong>
+                  {unavailableMenus}
+                </strong>
               </div>
 
               <div className="overview-row">
                 <span>Kategori</span>
-                <strong>{totalCategories}</strong>
+                <strong>
+                  {totalCategories}
+                </strong>
               </div>
 
             </div>
@@ -576,6 +1149,752 @@ function MenuManagementPage() {
           </div>
 
         </section>
+
+        {/* =====================================================
+            MODAL TAMBAH MENU
+        ===================================================== */}
+
+        {showCreateModal && (
+
+          <div
+            className="menu-modal-overlay"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                handleCloseCreateModal();
+              }
+            }}
+          >
+
+            <div className="menu-modal">
+
+              <div className="menu-modal-header">
+
+                <div>
+                  <span className="menu-modal-eyebrow">
+                    NEW MENU
+                  </span>
+
+                  <h2>
+                    Tambah Menu
+                  </h2>
+
+                  <p>
+                    Tambahkan menu baru ke restaurant.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="menu-modal-close"
+                  onClick={handleCloseCreateModal}
+                  disabled={saving}
+                >
+                  ×
+                </button>
+
+              </div>
+
+              {formError && (
+                <div className="menu-form-error">
+                  {formError}
+                </div>
+              )}
+
+              <form
+                className="menu-create-form"
+                onSubmit={handleCreateMenu}
+              >
+
+                {/* RESTAURANT */}
+
+                <div className="menu-form-group">
+
+                  <label htmlFor="restaurant_id">
+                    Restaurant
+                    <span>*</span>
+                  </label>
+
+                  <select
+                    id="restaurant_id"
+                    name="restaurant_id"
+                    value={formData.restaurant_id}
+                    onChange={handleFormChange}
+                    disabled={saving}
+                    required
+                  >
+
+                    <option value="">
+                      Pilih restaurant
+                    </option>
+
+                    {restaurants.map((restaurant) => (
+
+                      <option
+                        key={restaurant.id}
+                        value={restaurant.id}
+                      >
+                        {restaurant.name}
+                      </option>
+
+                    ))}
+
+                  </select>
+
+                </div>
+
+                {/* CATEGORY */}
+
+                <div className="menu-form-group">
+
+                  <label htmlFor="category_id">
+                    Kategori
+                    <span>*</span>
+                  </label>
+
+                  <select
+                    id="category_id"
+                    name="category_id"
+                    value={formData.category_id}
+                    onChange={handleFormChange}
+                    disabled={saving}
+                    required
+                  >
+
+                    <option value="">
+                      Pilih kategori
+                    </option>
+
+                    {categories
+                      .filter((category) => {
+                        if (!formData.restaurant_id) {
+                          return true;
+                        }
+
+                        return (
+                          String(category.restaurant_id) ===
+                          String(formData.restaurant_id)
+                        );
+                      })
+                      .map((category) => (
+
+                        <option
+                          key={category.id}
+                          value={category.id}
+                        >
+                          {category.name}
+                        </option>
+
+                      ))}
+
+                  </select>
+
+                </div>
+
+                {/* NAMA */}
+
+                <div className="menu-form-group">
+
+                  <label htmlFor="name">
+                    Nama Menu
+                    <span>*</span>
+                  </label>
+
+                  <input
+                    id="name"
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleFormChange}
+                    placeholder="Contoh: Nasi Goreng Spesial"
+                    disabled={saving}
+                    required
+                  />
+
+                </div>
+
+                {/* SLUG */}
+
+                <div className="menu-form-group">
+
+                  <label htmlFor="slug">
+                    Slug
+                  </label>
+
+                  <input
+                    id="slug"
+                    type="text"
+                    name="slug"
+                    value={formData.slug}
+                    onChange={handleFormChange}
+                    placeholder="nasi-goreng-spesial"
+                    disabled={saving}
+                  />
+
+                  <small>
+                    Slug otomatis dibuat dari nama menu.
+                  </small>
+
+                </div>
+
+                {/* DESKRIPSI */}
+
+                <div className="menu-form-group">
+
+                  <label htmlFor="description">
+                    Deskripsi
+                  </label>
+
+                  <textarea
+                    id="description"
+                    name="description"
+                    value={formData.description}
+                    onChange={handleFormChange}
+                    placeholder="Masukkan deskripsi menu..."
+                    rows="4"
+                    disabled={saving}
+                  />
+
+                </div>
+
+                {/* HARGA + SORT */}
+
+                <div className="menu-form-row">
+
+                  <div className="menu-form-group">
+
+                    <label htmlFor="price">
+                      Harga
+                      <span>*</span>
+                    </label>
+
+                    <div className="menu-price-input">
+
+                      <span>
+                        Rp
+                      </span>
+
+                      <input
+                        id="price"
+                        type="number"
+                        name="price"
+                        value={formData.price}
+                        onChange={handleFormChange}
+                        placeholder="15000"
+                        min="0"
+                        disabled={saving}
+                        required
+                      />
+
+                    </div>
+
+                  </div>
+
+                  <div className="menu-form-group">
+
+                    <label htmlFor="sort_order">
+                      Urutan
+                    </label>
+
+                    <input
+                      id="sort_order"
+                      type="number"
+                      name="sort_order"
+                      value={formData.sort_order}
+                      onChange={handleFormChange}
+                      min="0"
+                      disabled={saving}
+                    />
+
+                  </div>
+
+                </div>
+
+                {/* IMAGE */}
+
+                <div className="menu-form-group">
+
+                  <label htmlFor="image">
+                    Foto Menu
+                  </label>
+
+                  <input
+                    id="image"
+                    type="file"
+                    name="image"
+                    accept="image/*"
+                    onChange={handleFormChange}
+                    disabled={saving}
+                  />
+
+                  <small>
+                    Pilih foto menu jika tersedia.
+                  </small>
+
+                  {formData.image && (
+
+                    <div className="menu-selected-file">
+                      File dipilih:{" "}
+                      <strong>
+                        {formData.image.name}
+                      </strong>
+                    </div>
+
+                  )}
+
+                </div>
+
+                {/* STATUS */}
+
+                <div className="menu-form-checkbox">
+
+                  <label>
+
+                    <input
+                      type="checkbox"
+                      name="is_available"
+                      checked={formData.is_available}
+                      onChange={handleFormChange}
+                      disabled={saving}
+                    />
+
+                    <span>
+                      Menu tersedia
+                    </span>
+
+                  </label>
+
+                </div>
+
+                {/* FOOTER */}
+
+                <div className="menu-modal-footer">
+
+                  <button
+                    type="button"
+                    className="menu-modal-cancel"
+                    onClick={handleCloseCreateModal}
+                    disabled={saving}
+                  >
+                    Batal
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="menu-modal-submit"
+                    disabled={saving}
+                  >
+
+                    {saving ? (
+                      <>
+                        <span className="menu-button-spinner"></span>
+                        Menyimpan...
+                      </>
+                    ) : (
+                      <>
+                        <span>+</span>
+                        Simpan Menu
+                      </>
+                    )}
+
+                  </button>
+
+                </div>
+
+              </form>
+
+            </div>
+
+          </div>
+
+        )}
+
+        {/* =====================================================
+            MODAL EDIT MENU
+        ===================================================== */}
+
+        {showEditModal && (
+
+          <div
+            className="menu-modal-overlay"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                handleCloseEditModal();
+              }
+            }}
+          >
+
+            <div className="menu-modal">
+
+              {/* HEADER */}
+
+              <div className="menu-modal-header">
+
+                <div>
+                  <span className="menu-modal-eyebrow">
+                    EDIT MENU
+                  </span>
+
+                  <h2>
+                    Edit Menu
+                  </h2>
+
+                  <p>
+                    Ubah informasi menu yang dipilih.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="menu-modal-close"
+                  onClick={handleCloseEditModal}
+                  disabled={saving}
+                >
+                  ×
+                </button>
+
+              </div>
+
+              {/* ERROR */}
+
+              {formError && (
+
+                <div className="menu-form-error">
+                  {formError}
+                </div>
+
+              )}
+
+              {/* FORM */}
+
+              <form
+                className="menu-create-form"
+                onSubmit={handleUpdateMenu}
+              >
+
+                {/* RESTAURANT */}
+
+                <div className="menu-form-group">
+
+                  <label htmlFor="edit_restaurant_id">
+                    Restaurant
+                    <span>*</span>
+                  </label>
+
+                  <select
+                    id="edit_restaurant_id"
+                    name="restaurant_id"
+                    value={editFormData.restaurant_id}
+                    onChange={handleEditFormChange}
+                    disabled={saving}
+                    required
+                  >
+
+                    <option value="">
+                      Pilih restaurant
+                    </option>
+
+                    {restaurants.map((restaurant) => (
+
+                      <option
+                        key={restaurant.id}
+                        value={restaurant.id}
+                      >
+                        {restaurant.name}
+                      </option>
+
+                    ))}
+
+                  </select>
+
+                </div>
+
+                {/* CATEGORY */}
+
+                <div className="menu-form-group">
+
+                  <label htmlFor="edit_category_id">
+                    Kategori
+                    <span>*</span>
+                  </label>
+
+                  <select
+                    id="edit_category_id"
+                    name="category_id"
+                    value={editFormData.category_id}
+                    onChange={handleEditFormChange}
+                    disabled={saving}
+                    required
+                  >
+
+                    <option value="">
+                      Pilih kategori
+                    </option>
+
+                    {categories
+                      .filter((category) => {
+                        if (!editFormData.restaurant_id) {
+                          return true;
+                        }
+
+                        return (
+                          String(category.restaurant_id) ===
+                          String(editFormData.restaurant_id)
+                        );
+                      })
+                      .map((category) => (
+
+                        <option
+                          key={category.id}
+                          value={category.id}
+                        >
+                          {category.name}
+                        </option>
+
+                      ))}
+
+                  </select>
+
+                </div>
+
+                {/* NAMA */}
+
+                <div className="menu-form-group">
+
+                  <label htmlFor="edit_name">
+                    Nama Menu
+                    <span>*</span>
+                  </label>
+
+                  <input
+                    id="edit_name"
+                    type="text"
+                    name="name"
+                    value={editFormData.name}
+                    onChange={handleEditFormChange}
+                    placeholder="Contoh: Nasi Goreng Spesial"
+                    disabled={saving}
+                    required
+                  />
+
+                </div>
+
+                {/* SLUG */}
+
+                <div className="menu-form-group">
+
+                  <label htmlFor="edit_slug">
+                    Slug
+                  </label>
+
+                  <input
+                    id="edit_slug"
+                    type="text"
+                    name="slug"
+                    value={editFormData.slug}
+                    onChange={handleEditFormChange}
+                    placeholder="nasi-goreng-spesial"
+                    disabled={saving}
+                  />
+
+                  <small>
+                    Slug otomatis dibuat dari nama menu.
+                  </small>
+
+                </div>
+
+                {/* DESKRIPSI */}
+
+                <div className="menu-form-group">
+
+                  <label htmlFor="edit_description">
+                    Deskripsi
+                  </label>
+
+                  <textarea
+                    id="edit_description"
+                    name="description"
+                    value={editFormData.description}
+                    onChange={handleEditFormChange}
+                    placeholder="Masukkan deskripsi menu..."
+                    rows="4"
+                    disabled={saving}
+                  />
+
+                </div>
+
+                {/* HARGA + SORT */}
+
+                <div className="menu-form-row">
+
+                  <div className="menu-form-group">
+
+                    <label htmlFor="edit_price">
+                      Harga
+                      <span>*</span>
+                    </label>
+
+                    <div className="menu-price-input">
+
+                      <span>
+                        Rp
+                      </span>
+
+                      <input
+                        id="edit_price"
+                        type="number"
+                        name="price"
+                        value={editFormData.price}
+                        onChange={handleEditFormChange}
+                        placeholder="15000"
+                        min="0"
+                        disabled={saving}
+                        required
+                      />
+
+                    </div>
+
+                  </div>
+
+                  <div className="menu-form-group">
+
+                    <label htmlFor="edit_sort_order">
+                      Urutan
+                    </label>
+
+                    <input
+                      id="edit_sort_order"
+                      type="number"
+                      name="sort_order"
+                      value={editFormData.sort_order}
+                      onChange={handleEditFormChange}
+                      min="0"
+                      disabled={saving}
+                    />
+
+                  </div>
+
+                </div>
+
+                {/* FOTO LAMA */}
+
+                {editingMenu?.image_url && (
+
+                  <div className="menu-form-group">
+
+                    <label>
+                      Foto Saat Ini
+                    </label>
+
+                    <div>
+                      <img
+                        src={editingMenu.image_url}
+                        alt={editingMenu.name}
+                        className="menu-edit-preview"
+                      />
+                    </div>
+
+                  </div>
+
+                )}
+
+                {/* FOTO BARU */}
+
+                <div className="menu-form-group">
+
+                  <label htmlFor="edit_image">
+                    Ganti Foto Menu
+                  </label>
+
+                  <input
+                    id="edit_image"
+                    type="file"
+                    name="image"
+                    accept="image/*"
+                    onChange={handleEditFormChange}
+                    disabled={saving}
+                  />
+
+                  <small>
+                    Kosongkan jika tidak ingin mengganti foto.
+                  </small>
+
+                  {editFormData.image && (
+
+                    <div className="menu-selected-file">
+                      Foto baru:{" "}
+                      <strong>
+                        {editFormData.image.name}
+                      </strong>
+                    </div>
+
+                  )}
+
+                </div>
+
+                {/* STATUS */}
+
+                <div className="menu-form-checkbox">
+
+                  <label>
+
+                    <input
+                      type="checkbox"
+                      name="is_available"
+                      checked={editFormData.is_available}
+                      onChange={handleEditFormChange}
+                      disabled={saving}
+                    />
+
+                    <span>
+                      Menu tersedia
+                    </span>
+
+                  </label>
+
+                </div>
+
+                {/* FOOTER */}
+
+                <div className="menu-modal-footer">
+
+                  <button
+                    type="button"
+                    className="menu-modal-cancel"
+                    onClick={handleCloseEditModal}
+                    disabled={saving}
+                  >
+                    Batal
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="menu-modal-submit"
+                    disabled={saving}
+                  >
+
+                    {saving ? (
+                      <>
+                        <span className="menu-button-spinner"></span>
+                        Menyimpan...
+                      </>
+                    ) : (
+                      <>
+                        <span>✓</span>
+                        Simpan Perubahan
+                      </>
+                    )}
+
+                  </button>
+
+                </div>
+
+              </form>
+
+            </div>
+
+          </div>
+
+        )}
 
       </main>
     </div>

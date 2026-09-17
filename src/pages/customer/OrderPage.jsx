@@ -16,7 +16,10 @@ function OrderPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Ambil data meja dari localStorage
+  // =========================================================
+  // AMBIL DATA MEJA DARI LOCAL STORAGE
+  // =========================================================
+
   const savedTable =
     localStorage.getItem("restaurantTable");
 
@@ -26,54 +29,119 @@ function OrderPage() {
 
   const table =
     parsedTable?.table ||
+    parsedTable?.data?.table ||
     parsedTable?.data ||
     parsedTable;
 
-  // Hitung total pesanan
+  // =========================================================
+  // HITUNG TOTAL PESANAN
+  // =========================================================
+
   const grandTotal = cartItems.reduce(
     (total, item) =>
       total + (Number(item.totalPrice) || 0),
     0
   );
 
-  // Link kembali ke menu
+  // =========================================================
+  // LINK KEMBALI KE MENU
+  // =========================================================
+
   const menuLink = table?.code
     ? `/?table=${table.code}`
     : "/";
 
-  /*
-   * =========================
-   * VALIDASI FORM
-   * =========================
-   *
-   * Nama dan nomor WhatsApp wajib diisi.
-   * Catatan pesanan bersifat opsional.
-   */
+  // =========================================================
+  // VALIDASI FORM
+  // =========================================================
 
   const isFormValid =
     name.trim() !== "" &&
     phone.trim() !== "";
 
-  /*
-   * =========================
-   * KONFIRMASI PESANAN
-   * =========================
-   */
+  // =========================================================
+  // AMBIL LOKASI PELANGGAN
+  // =========================================================
+
+  const getCurrentLocation = () => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject({
+          type: "geolocation",
+          message:
+            "Browser kamu tidak mendukung fitur lokasi.",
+        });
+
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+        },
+
+        (locationError) => {
+          reject({
+            type: "geolocation",
+            code: locationError.code,
+            message:
+              "Lokasi tidak dapat diambil.",
+          });
+        },
+
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        }
+      );
+    });
+  };
+
+  // =========================================================
+  // KONFIRMASI PESANAN
+  // =========================================================
 
   const handleConfirmOrder = async () => {
-    // Validasi nama
+    // -------------------------------------------------------
+    // VALIDASI NAMA
+    // -------------------------------------------------------
+
     if (name.trim() === "") {
       setError(
         "Nama wajib diisi sebelum melakukan konfirmasi pesanan."
       );
+
       return;
     }
 
-    // Validasi nomor WhatsApp
+    // -------------------------------------------------------
+    // VALIDASI NOMOR WHATSAPP
+    // -------------------------------------------------------
+
     if (phone.trim() === "") {
       setError(
         "Nomor WhatsApp wajib diisi sebelum melakukan konfirmasi pesanan."
       );
+
+      return;
+    }
+
+    // -------------------------------------------------------
+    // VALIDASI KERANJANG
+    // -------------------------------------------------------
+
+    if (
+      !cartItems ||
+      cartItems.length === 0
+    ) {
+      setError(
+        "Keranjang pesanan masih kosong."
+      );
+
       return;
     }
 
@@ -81,46 +149,94 @@ function OrderPage() {
       setLoading(true);
       setError("");
 
-      const orderData = {
-        restaurant_id:
-          cartItems[0].restaurantId,
+      // =====================================================
+      // 1. AMBIL LOKASI PELANGGAN
+      // =====================================================
 
+      console.log(
+        "Mengambil lokasi pelanggan..."
+      );
+
+      const location =
+        await getCurrentLocation();
+
+      console.log(
+        "Lokasi pelanggan:",
+        location
+      );
+
+      // =====================================================
+      // 2. BUAT DATA PESANAN
+      // =====================================================
+
+      const orderData = {
+        // Restaurant
+        restaurant_id:
+          cartItems[0]?.restaurantId,
+
+        // Meja
         table_id:
           table?.id || null,
 
+        // Pelanggan
         customer_name:
           name.trim(),
 
+        // Catatan
         note:
           notes.trim() || null,
 
-        items: cartItems.map((item) => ({
-          menu_id:
-            item.menuId,
+        // ===================================================
+        // LOKASI
+        // ===================================================
 
-          variant_id:
-            item.variant?.id || null,
+        latitude:
+          location.latitude,
 
-          addon_ids:
-            item.addons
-              ? item.addons.map(
-                  (addon) => addon.id
-                )
-              : [],
+        longitude:
+          location.longitude,
 
-          quantity:
-            item.quantity,
+        // ===================================================
+        // ITEM PESANAN
+        // ===================================================
 
-          note: null,
-        })),
+        items: cartItems.map(
+          (item) => ({
+            menu_id:
+              item.menuId,
+
+            variant_id:
+              item.variant?.id || null,
+
+            addon_ids:
+              item.addons
+                ? item.addons.map(
+                    (addon) =>
+                      addon.id
+                  )
+                : [],
+
+            quantity:
+              item.quantity,
+
+            note: null,
+          })
+        ),
       };
+
+      // =====================================================
+      // DEBUG DATA
+      // =====================================================
 
       console.log(
         "Data yang dikirim:",
         orderData
       );
 
-      // Buat pesanan
+      // =====================================================
+      // 3. BUAT PESANAN
+      // =====================================================
+
       const result =
         await createOrder(orderData);
 
@@ -129,42 +245,156 @@ function OrderPage() {
         result
       );
 
+      // =====================================================
+      // 4. AMBIL ID PESANAN
+      // =====================================================
+
       const orderId =
-        result.data.id;
+        result?.data?.id ||
+        result?.id;
 
       console.log(
         "ID Pesanan:",
         orderId
       );
 
-      // Ambil link WhatsApp
+      if (!orderId) {
+        throw new Error(
+          "ID pesanan tidak ditemukan dari response backend."
+        );
+      }
+
+      // =====================================================
+      // 5. AMBIL LINK WHATSAPP
+      // =====================================================
+
       const whatsappResult =
-        await getWhatsAppUrl(orderId);
+        await getWhatsAppUrl(
+          orderId
+        );
 
       console.log(
         "Response WhatsApp:",
         whatsappResult
       );
 
-      // Buka WhatsApp
-      if (
-        whatsappResult.whatsapp_url
-      ) {
+      // =====================================================
+      // 6. BUKA WHATSAPP
+      // =====================================================
+
+      const whatsappUrl =
+        whatsappResult?.whatsapp_url ||
+        whatsappResult?.data?.whatsapp_url;
+
+      if (whatsappUrl) {
         window.open(
-          whatsappResult.whatsapp_url,
+          whatsappUrl,
           "_blank"
         );
       } else {
         setError(
           "Pesanan berhasil dibuat, tetapi link WhatsApp tidak ditemukan."
         );
+
+        return;
       }
+
+      // =====================================================
+      // PESAN BERHASIL
+      // =====================================================
+
+      console.log(
+        "Pesanan berhasil dibuat!"
+      );
 
     } catch (err) {
       console.error(
         "Gagal membuat pesanan:",
         err
       );
+
+      // =====================================================
+      // ERROR LOKASI
+      // =====================================================
+
+      if (
+        err?.type ===
+        "geolocation"
+      ) {
+        if (err.code === 1) {
+          setError(
+            "Akses lokasi ditolak. Silakan izinkan lokasi untuk membuat pesanan."
+          );
+        } else if (
+          err.code === 2
+        ) {
+          setError(
+            "Lokasi kamu tidak dapat ditemukan. Pastikan lokasi/GPS perangkat aktif."
+          );
+        } else if (
+          err.code === 3
+        ) {
+          setError(
+            "Pengambilan lokasi terlalu lama. Silakan coba lagi."
+          );
+        } else {
+          setError(
+            "Lokasi diperlukan untuk membuat pesanan."
+          );
+        }
+
+        return;
+      }
+
+      // =====================================================
+      // ERROR DARI BACKEND
+      // =====================================================
+
+      if (
+        err?.response?.data
+      ) {
+        console.error(
+          "Detail error backend:",
+          err.response.data
+        );
+
+        const backendData =
+          err.response.data;
+
+        // Pesan utama dari backend
+        if (
+          backendData.message
+        ) {
+          setError(
+            backendData.message
+          );
+
+          return;
+        }
+
+        // Jika error berbentuk validation errors
+        if (
+          backendData.errors
+        ) {
+          const validationMessages =
+            Object.values(
+              backendData.errors
+            )
+              .flat()
+              .join(" ");
+
+          setError(
+            validationMessages ||
+              "Data pesanan tidak valid."
+          );
+
+          return;
+        }
+      }
+
+      // =====================================================
+      // ERROR UMUM
+      // =====================================================
 
       setError(
         "Gagal membuat pesanan. Silakan coba lagi."
@@ -175,11 +405,9 @@ function OrderPage() {
     }
   };
 
-  /*
-   * =========================
-   * KERANJANG KOSONG
-   * =========================
-   */
+  // =========================================================
+  // KERANJANG KOSONG
+  // =========================================================
 
   if (cartItems.length === 0) {
     return (
@@ -221,14 +449,18 @@ function OrderPage() {
     );
   }
 
+  // =========================================================
+  // HALAMAN CHECKOUT
+  // =========================================================
+
   return (
     <main className="order-page">
 
       <div className="container order-container">
 
-        {/* =========================
+        {/* ===================================================
             HEADER
-        ========================== */}
+        ==================================================== */}
 
         <div className="order-page-header">
 
@@ -259,10 +491,9 @@ function OrderPage() {
 
         </div>
 
-
-        {/* =========================
+        {/* ===================================================
             ERROR
-        ========================== */}
+        ==================================================== */}
 
         {error && (
           <div className="order-error">
@@ -286,10 +517,9 @@ function OrderPage() {
           </div>
         )}
 
-
-        {/* =========================
+        {/* ===================================================
             INFORMASI MEJA
-        ========================== */}
+        ==================================================== */}
 
         {table && (
           <div className="order-table-card">
@@ -305,7 +535,9 @@ function OrderPage() {
               </span>
 
               <strong>
-                {table.name}
+                {table.name ||
+                  table.code ||
+                  "Meja"}
               </strong>
 
               <small>
@@ -317,10 +549,9 @@ function OrderPage() {
           </div>
         )}
 
-
-        {/* =========================
+        {/* ===================================================
             MEJA BELUM TERDETEKSI
-        ========================== */}
+        ==================================================== */}
 
         {!table && (
           <div className="order-warning">
@@ -345,10 +576,9 @@ function OrderPage() {
           </div>
         )}
 
-
-        {/* =========================
+        {/* ===================================================
             INFORMASI PESANAN
-        ========================== */}
+        ==================================================== */}
 
         <div className="order-reminder">
 
@@ -379,16 +609,15 @@ function OrderPage() {
 
         </div>
 
-
-        {/* =========================
+        {/* ===================================================
             CONTENT
-        ========================== */}
+        ==================================================== */}
 
         <div className="order-content">
 
-          {/* =========================
+          {/* =================================================
               DATA PELANGGAN
-          ========================== */}
+          ================================================== */}
 
           <section className="order-card">
 
@@ -407,7 +636,6 @@ function OrderPage() {
               </div>
 
             </div>
-
 
             <div className="order-form">
 
@@ -428,7 +656,9 @@ function OrderPage() {
                   placeholder="Masukkan nama"
                   value={name}
                   onChange={(e) => {
-                    setName(e.target.value);
+                    setName(
+                      e.target.value
+                    );
                     setError("");
                   }}
                 />
@@ -438,7 +668,6 @@ function OrderPage() {
                 </small>
 
               </div>
-
 
               {/* NOMOR WHATSAPP */}
 
@@ -457,7 +686,9 @@ function OrderPage() {
                   placeholder="Contoh: 081234567890"
                   value={phone}
                   onChange={(e) => {
-                    setPhone(e.target.value);
+                    setPhone(
+                      e.target.value
+                    );
                     setError("");
                   }}
                 />
@@ -468,16 +699,18 @@ function OrderPage() {
 
               </div>
 
-
               {/* CATATAN */}
 
               <div className="order-form-group">
 
                 <label htmlFor="order-notes">
+
                   Catatan Pesanan
+
                   <span className="optional-mark">
                     (opsional)
                   </span>
+
                 </label>
 
                 <textarea
@@ -486,7 +719,9 @@ function OrderPage() {
                   placeholder="Contoh: Tidak pakai daun bawang"
                   value={notes}
                   onChange={(e) =>
-                    setNotes(e.target.value)
+                    setNotes(
+                      e.target.value
+                    )
                   }
                 />
 
@@ -501,10 +736,9 @@ function OrderPage() {
 
           </section>
 
-
-          {/* =========================
+          {/* =================================================
               RINGKASAN PESANAN
-          ========================== */}
+          ================================================== */}
 
           <section className="order-card">
 
@@ -526,7 +760,8 @@ function OrderPage() {
 
                 {cartItems.reduce(
                   (total, item) =>
-                    total + item.quantity,
+                    total +
+                    item.quantity,
                   0
                 )}{" "}
 
@@ -535,7 +770,6 @@ function OrderPage() {
               </span>
 
             </div>
-
 
             <div className="order-items">
 
@@ -588,12 +822,14 @@ function OrderPage() {
                         </h3>
 
                         <div className="order-item-price">
+
                           {item.quantity} × Rp{" "}
+
                           {unitPrice.toLocaleString(
                             "id-ID"
                           )}
-                        </div>
 
+                        </div>
 
                         {/* VARIANT */}
 
@@ -605,18 +841,22 @@ function OrderPage() {
                             </span>
 
                             <strong>
-                              {item.variant.name}
+                              {
+                                item
+                                  .variant
+                                  .name
+                              }
                             </strong>
 
                           </div>
                         )}
-
 
                         {/* ADD-ON */}
 
                         {item.addons &&
                           item.addons.length >
                             0 && (
+
                             <div className="order-item-option">
 
                               <span>
@@ -626,7 +866,9 @@ function OrderPage() {
                               <strong>
                                 {item.addons
                                   .map(
-                                    (addon) =>
+                                    (
+                                      addon
+                                    ) =>
                                       addon.name
                                   )
                                   .join(
@@ -635,14 +877,15 @@ function OrderPage() {
                               </strong>
 
                             </div>
+
                           )}
 
                       </div>
 
-
                       <div className="order-item-total">
 
                         Rp{" "}
+
                         {itemTotal.toLocaleString(
                           "id-ID"
                         )}
@@ -656,10 +899,9 @@ function OrderPage() {
 
             </div>
 
-
-            {/* =========================
+            {/* =================================================
                 TOTAL
-            ========================== */}
+            ================================================== */}
 
             <div className="order-total">
 
@@ -677,10 +919,13 @@ function OrderPage() {
               </div>
 
               <strong>
+
                 Rp{" "}
+
                 {grandTotal.toLocaleString(
                   "id-ID"
                 )}
+
               </strong>
 
             </div>
@@ -689,10 +934,9 @@ function OrderPage() {
 
         </div>
 
-
-        {/* =========================
+        {/* ===================================================
             ACTION
-        ========================== */}
+        ==================================================== */}
 
         <div className="order-actions">
 
@@ -700,13 +944,14 @@ function OrderPage() {
             to="/cart"
             className="order-secondary-button"
           >
+
             <span>
               ←
             </span>
 
             Kembali
-          </Link>
 
+          </Link>
 
           <button
             type="button"
@@ -722,7 +967,7 @@ function OrderPage() {
               <>
                 <span className="order-spinner" />
 
-                Memproses...
+                Mengambil lokasi...
               </>
             ) : (
               <>
@@ -738,10 +983,9 @@ function OrderPage() {
 
         </div>
 
-
-        {/* =========================
+        {/* ===================================================
             FOOTER NOTE
-        ========================== */}
+        ==================================================== */}
 
         <p className="order-footer-note">
 

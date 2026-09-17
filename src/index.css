@@ -8468,3 +8468,575 @@ a {
     width: 100% !important;
   }
 }
+
+/* =========================================================
+   MODAL TAMBAH MENU
+   ========================================================= */
+
+.menu-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 30px;
+
+  background: rgba(30, 24, 27, 0.48);
+
+  overflow-y: auto;
+}
+
+.menu-modal {
+  width: min(680px, 100%);
+
+  max-height: calc(100vh - 60px);
+
+  overflow-y: auto;
+
+  background: #ffffff;
+
+  border-radius: 15px;
+
+  border: 1px solid #e8e1e4;
+
+  box-shadow: 0 25px 70px rgba(45, 30, 37, 0.2);
+}
+
+/* ================= MODAL HEADER ================= */
+
+.menu-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  padding: 25px 28px 20px;
+
+  border-bottom: 1px solid #eee9eb;
+}
+
+.menu-modal-header span {
+  display: block;
+
+  margin-bottom: 5px;
+
+  color: #98263d;
+
+  font-size: 10px;
+  font-weight: 700;
+
+  letter-spacing: 1.2px;
+}
+
+.menu-modal-header h2 {
+  margin: 0;
+
+  color: #211c20;
+
+  font-size: 23px;
+  font-weight: 700;
+}
+
+.menu-modal-header p {
+  margin: 6px 0 0;
+
+  color: #8c8389;
+
+  font-size: 13px;
+}
+
+.menu-modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 34px;
+  height: 34px;
+
+  border: none;
+  border-radius: 8px;
+
+  background: #f6f2f4;
+
+  color: #6f666c;
+
+  font-size: 23px;
+  line-height: 1;
+
+  cursor: pointer;
+}
+
+.menu-modal-close:hover {
+  background: #eee8eb;
+}
+
+/* ================= FORM ================= */
+
+.menu-create-form {
+  padding: 25px 28px 28px;
+}
+
+.menu-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+
+  gap: 16px;
+}
+
+.menu-form-group {
+  display: flex;
+  flex-direction: column;
+
+  gap: 7px;
+
+  margin-bottom: 17px;
+}
+
+.menu-form-group label {
+  color: #51494f;
+
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.menu-form-group label span {
+  margin-left: 3px;
+
+  color: #98263d;
+}
+
+.menu-form-group input,
+.menu-form-group select,
+.menu-form-group textarea {
+  width: 100%;
+
+  padding: 11px 13px;
+
+  border: 1px solid #ded8dc;
+  border-radius: 8px;
+
+  background: #ffffff;
+
+  color: #302b2f;
+
+  outline: none;
+
+  font-family: inherit;
+  font-size: 13px;
+
+  box-sizing: border-box;
+
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.menu-form-group input,
+.menu-form-group select {
+  height: 43px;
+}
+
+.menu-form-group textarea {
+  resize: vertical;
+
+  min-height: 95px;
+}
+
+.menu-form-group input:focus,
+.menu-form-group select:focus,
+.menu-form-group textarea:focus {
+  border-color: #98263d;
+
+  box-shadow:
+    0 0 0 3px rgba(152, 38, 61, 0.07);
+}
+
+.menu-form-group input::placeholder,
+.menu-form-group textarea::placeholder {
+  color: #aaa1a7;
+}
+
+.menu-form-group small {
+  color: #9a9197;
+
+  font-size: 11px;
+}
+
+/* ================= PRICE ================= */
+
+.menu-price-input {
+  display: flex;
+  align-items: center;
+
+  height: 43px;
+
+  border: 1px solid #ded8dc;
+  border-radius: 8px;
+
+  overflow: hidden;
+
+  background: white;
+}
+
+.menu-price-input span {
+  display: flex;
+  align-items: center;
+
+  height: 100%;
+
+  padding: 0 13px;
+
+  background: #f8f5f6;
+
+  border-right: 1px solid #ded8dc;
+
+  color: #756c72;
+
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.menu-price-input input {
+  flex: 1;
+
+  height: 100%;
+
+  padding: 0 13px;
+
+  border: none !important;
+
+  outline: none;
+
+  box-shadow: none !important;
+}
+
+/* ================= FILE INPUT ================= */
+
+.menu-form-group input[type="file"] {
+  height: auto;
+
+  padding: 9px;
+
+  background: #fcfafb;
+
+  cursor: pointer;
+}
+
+/* ================= AVAILABILITY ================= */
+
+.menu-availability {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+
+  margin: 5px 0 22px;
+
+  padding: 13px 14px;
+
+  border: 1px solid #ebe5e8;
+  border-radius: 9px;
+
+  background: #fcfafb;
+
+  cursor: pointer;
+}
+
+.menu-availability input {
+  width: 17px;
+  height: 17px;
+
+  accent-color: #98263d;
+
+  cursor: pointer;
+}
+
+.menu-availability div {
+  display: flex;
+  flex-direction: column;
+
+  gap: 3px;
+}
+
+.menu-availability strong {
+  color: #393238;
+
+  font-size: 13px;
+}
+
+.menu-availability span {
+  color: #948b91;
+
+  font-size: 11px;
+}
+
+/* ================= FORM ERROR ================= */
+
+.menu-form-error {
+  margin: 20px 28px 0;
+
+  padding: 12px 14px;
+
+  border: 1px solid #f0c9d1;
+  border-radius: 8px;
+
+  background: #fff1f3;
+
+  color: #98263d;
+
+  font-size: 12px;
+}
+
+/* ================= FORM ACTION ================= */
+
+.menu-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+
+  padding-top: 5px;
+}
+
+.menu-cancel-button,
+.menu-save-button {
+  height: 42px;
+
+  padding: 0 18px;
+
+  border-radius: 8px;
+
+  font-family: inherit;
+
+  font-size: 13px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.menu-cancel-button {
+  border: 1px solid #ded8dc;
+
+  background: white;
+
+  color: #665e64;
+}
+
+.menu-cancel-button:hover {
+  background: #f7f4f5;
+}
+
+.menu-save-button {
+  border: none;
+
+  background: #98263d;
+
+  color: white;
+}
+
+.menu-save-button:hover {
+  background: #842136;
+
+  transform: translateY(-1px);
+}
+
+.menu-cancel-button:disabled,
+.menu-save-button:disabled,
+.menu-modal-close:disabled {
+  opacity: 0.6;
+
+  cursor: not-allowed;
+
+  transform: none;
+}
+
+/* ================= MODAL RESPONSIVE ================= */
+
+@media (max-width: 700px) {
+  .menu-modal-overlay {
+    padding: 15px;
+  }
+
+  .menu-modal {
+    max-height: calc(100vh - 30px);
+  }
+
+  .menu-modal-header {
+    padding: 20px;
+  }
+
+  .menu-create-form {
+    padding: 20px;
+  }
+
+  .menu-form-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .menu-form-actions {
+    flex-direction: column-reverse;
+  }
+
+  .menu-cancel-button,
+  .menu-save-button {
+    width: 100%;
+  }
+}
+
+/* =========================================================
+   RESTAURANT LOCATION
+========================================================= */
+
+.restaurant-location-section {
+  margin-top: 24px;
+}
+
+.settings-location-loading {
+  padding: 20px;
+  text-align: center;
+  color: #777;
+  background: #faf9fa;
+  border: 1px solid #eadfe2;
+  border-radius: 12px;
+}
+
+.settings-location-error {
+  margin-bottom: 20px;
+  padding: 16px 18px;
+  border: 1px solid #efcaca;
+  background: #fff5f5;
+  border-radius: 12px;
+  color: #9f1d35;
+}
+
+.settings-location-error strong {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.settings-location-error p {
+  margin: 0;
+  color: #7b4b54;
+}
+
+/* INFO RESTAURANT */
+
+.restaurant-location-info {
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 18px;
+  background: #faf8f9;
+  border: 1px solid #eadfe2;
+  border-radius: 12px;
+}
+
+.restaurant-location-info div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.restaurant-location-info span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  color: #98263d;
+}
+
+.restaurant-location-info strong {
+  font-size: 16px;
+  color: #222;
+}
+
+/* INPUT UNIT */
+
+.settings-input-with-unit {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.settings-input-with-unit input {
+  width: 100%;
+  padding-right: 75px;
+}
+
+.settings-input-with-unit span {
+  position: absolute;
+  right: 14px;
+  color: #777;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* NOTE */
+
+.restaurant-location-note {
+  display: flex;
+  gap: 14px;
+  margin-top: 24px;
+  padding: 18px;
+  background: #fff8f3;
+  border: 1px solid #f0ddd0;
+  border-radius: 12px;
+}
+
+.restaurant-location-note > span {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+  background: #98263d;
+  color: white;
+
+  font-weight: 700;
+}
+
+.restaurant-location-note strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #222;
+}
+
+.restaurant-location-note p {
+  margin: 0;
+  line-height: 1.6;
+  color: #777;
+  font-size: 14px;
+}
+
+/* SMALL TEXT */
+
+.settings-field small {
+  display: block;
+  margin-top: 6px;
+  color: #888;
+  font-size: 12px;
+}
+
+/* DISABLED BUTTON */
+
+.settings-save-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 800px) {
+  .restaurant-location-info {
+    grid-template-columns: 1fr;
+  }
+}
