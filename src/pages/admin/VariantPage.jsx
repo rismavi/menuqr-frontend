@@ -1,884 +1,1393 @@
+import { useEffect, useMemo, useState } from "react";
+
 import AdminSidebar from "../../components/admin/AdminSidebar";
 
+import { getAdminMenus } from "../../services/menuService";
+
+import {
+  getMenuVariants,
+  createVariant,
+  updateVariant,
+  deleteVariant,
+} from "../../services/variantService";
+
 function VariantPage() {
-  const variants = [
-    {
-      id: 1,
-      menu: "Spicy Ramen",
-      variant: "Level 0",
-      description: "Tidak pedas",
-      price: "Rp 35.000",
-      status: "Aktif",
-    },
-    {
-      id: 2,
-      menu: "Spicy Ramen",
-      variant: "Level 1",
-      description: "Pedas ringan",
-      price: "Rp 35.000",
-      status: "Aktif",
-    },
-    {
-      id: 3,
-      menu: "Spicy Ramen",
-      variant: "Level 2",
-      description: "Pedas sedang",
-      price: "Rp 36.000",
-      status: "Aktif",
-    },
-    {
-      id: 4,
-      menu: "Spicy Ramen",
-      variant: "Level 3",
-      description: "Pedas",
-      price: "Rp 37.000",
-      status: "Aktif",
-    },
-    {
-      id: 5,
-      menu: "Spicy Ramen",
-      variant: "Level 4",
-      description: "Sangat pedas",
-      price: "Rp 38.000",
-      status: "Aktif",
-    },
-    {
-      id: 6,
-      menu: "Chicken Ramen",
-      variant: "Regular",
-      description: "Porsi standar",
-      price: "Rp 32.000",
-      status: "Aktif",
-    },
-  ];
+  // ========================================
+  // DATA
+  // ========================================
+
+  const [menus, setMenus] = useState([]);
+  const [variants, setVariants] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+
+  // ========================================
+  // FILTER
+  // ========================================
+
+  const [search, setSearch] = useState("");
+  const [menuFilter, setMenuFilter] = useState("all");
+
+  // ========================================
+  // MODAL TAMBAH
+  // ========================================
+
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const [addForm, setAddForm] = useState({
+    menu_id: "",
+    name: "",
+    price: "",
+    sort_order: 0,
+  });
+
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  // ========================================
+  // MODAL EDIT
+  // ========================================
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingVariant, setEditingVariant] = useState(null);
+
+  const [editForm, setEditForm] = useState({
+    name: "",
+    price: "",
+    sort_order: 0,
+  });
+
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+
+  // ========================================
+  // DELETE
+  // ========================================
+
+  const [deletingId, setDeletingId] = useState(null);
+
+  // ========================================
+  // LOAD DATA
+  // ========================================
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+
+      // ========================================
+      // AMBIL MENU
+      // ========================================
+
+      const menuResponse = await getAdminMenus();
+
+      let menuData = [];
+
+      if (Array.isArray(menuResponse)) {
+        menuData = menuResponse;
+      } else if (Array.isArray(menuResponse?.data)) {
+        menuData = menuResponse.data;
+      } else if (Array.isArray(menuResponse?.menus)) {
+        menuData = menuResponse.menus;
+      } else if (Array.isArray(menuResponse?.data?.data)) {
+        menuData = menuResponse.data.data;
+      } else if (Array.isArray(menuResponse?.data?.menus)) {
+        menuData = menuResponse.data.menus;
+      }
+
+      setMenus(menuData);
+
+      // ========================================
+      // AMBIL VARIANT DARI SETIAP MENU
+      // ========================================
+
+      const variantResults = await Promise.all(
+        menuData.map(async (menu) => {
+          try {
+            const response = await getMenuVariants(menu.id);
+
+            let variantData = [];
+
+            if (Array.isArray(response)) {
+              variantData = response;
+            } else if (Array.isArray(response?.data)) {
+              variantData = response.data;
+            }
+
+            return variantData.map((variant) => ({
+              ...variant,
+              menu_id: menu.id,
+              menu_name: menu.name,
+            }));
+          } catch (error) {
+            console.error(
+              `Gagal mengambil variant menu ${menu.name}:`,
+              error
+            );
+
+            return [];
+          }
+        })
+      );
+
+      setVariants(variantResults.flat());
+    } catch (error) {
+      console.error(
+        "Gagal mengambil data variant:",
+        error
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // ========================================
+  // FILTER DATA
+  // ========================================
+
+  const filteredVariants = useMemo(() => {
+    return variants.filter((variant) => {
+      const variantName =
+        variant.name ??
+        variant.variant_name ??
+        variant.title ??
+        "";
+
+      const menuName = variant.menu_name ?? "";
+
+      const matchSearch =
+        variantName
+          .toString()
+          .toLowerCase()
+          .includes(search.toLowerCase()) ||
+        menuName
+          .toString()
+          .toLowerCase()
+          .includes(search.toLowerCase());
+
+      const matchMenu =
+        menuFilter === "all" ||
+        Number(variant.menu_id) ===
+          Number(menuFilter);
+
+      return matchSearch && matchMenu;
+    });
+  }, [
+    variants,
+    search,
+    menuFilter,
+  ]);
+
+  // ========================================
+  // STATISTIK
+  // ========================================
+
+  const totalVariants = variants.length;
+
+  const totalMenusWithVariant = new Set(
+    variants.map((variant) => variant.menu_id)
+  ).size;
+
+  const popularVariant = useMemo(() => {
+    if (variants.length === 0) {
+      return "-";
+    }
+
+    const countMap = {};
+
+    variants.forEach((variant) => {
+      const name =
+        variant.name ??
+        variant.variant_name ??
+        variant.title ??
+        "-";
+
+      countMap[name] =
+        (countMap[name] || 0) + 1;
+    });
+
+    return (
+      Object.entries(countMap).sort(
+        (a, b) => b[1] - a[1]
+      )[0]?.[0] ?? "-"
+    );
+  }, [variants]);
+
+  // ========================================
+  // TAMBAH VARIANT
+  // ========================================
+
+  const handleOpenAddModal = () => {
+    setFormError("");
+
+    setAddForm({
+      menu_id:
+        menus.length > 0
+          ? menus[0].id
+          : "",
+      name: "",
+      price: "",
+      sort_order: 0,
+    });
+
+    setShowAddModal(true);
+  };
+
+  const handleCloseAddModal = () => {
+    if (saving) return;
+
+    setShowAddModal(false);
+    setFormError("");
+  };
+
+  const handleAddChange = (event) => {
+    const {
+      name,
+      value,
+    } = event.target;
+
+    setAddForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleAddVariant = async (event) => {
+    event.preventDefault();
+
+    setFormError("");
+
+    // ========================================
+    // VALIDASI MENU
+    // ========================================
+
+    if (!addForm.menu_id) {
+      setFormError(
+        "Silakan pilih menu terlebih dahulu."
+      );
+      return;
+    }
+
+    // ========================================
+    // VALIDASI NAMA
+    // ========================================
+
+    if (!addForm.name.trim()) {
+      setFormError(
+        "Nama variant wajib diisi."
+      );
+      return;
+    }
+
+    // ========================================
+    // VALIDASI HARGA
+    // ========================================
+
+    if (
+      addForm.price === "" ||
+      Number(addForm.price) < 0
+    ) {
+      setFormError(
+        "Harga variant tidak valid."
+      );
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      await createVariant(
+        addForm.menu_id,
+        {
+          name: addForm.name.trim(),
+          price: Number(addForm.price),
+          sort_order:
+            Number(addForm.sort_order) || 0,
+        }
+      );
+
+      setShowAddModal(false);
+
+      await loadData();
+
+      alert(
+        "Variant berhasil ditambahkan."
+      );
+    } catch (error) {
+      console.error(
+        "Gagal menambahkan variant:",
+        error
+      );
+
+      const message =
+        error?.response?.data?.message ||
+        "Variant gagal ditambahkan.";
+
+      setFormError(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ========================================
+  // EDIT VARIANT
+  // ========================================
+
+  const handleOpenEditModal = (
+    variant
+  ) => {
+    setEditingVariant(variant);
+
+    setEditForm({
+      name:
+        variant.name ??
+        variant.variant_name ??
+        variant.title ??
+        "",
+
+      price: Number(
+        variant.price ??
+          variant.additional_price ??
+          variant.extra_price ??
+          0
+      ),
+
+      sort_order: Number(
+        variant.sort_order ?? 0
+      ),
+    });
+
+    setEditError("");
+    setShowEditModal(true);
+  };
+
+  const handleCloseEditModal = () => {
+    if (editSaving) return;
+
+    setShowEditModal(false);
+    setEditingVariant(null);
+    setEditError("");
+  };
+
+  const handleEditChange = (
+    event
+  ) => {
+    const {
+      name,
+      value,
+    } = event.target;
+
+    setEditForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleEditVariant = async (
+    event
+  ) => {
+    event.preventDefault();
+
+    if (!editingVariant) return;
+
+    setEditError("");
+
+    // ========================================
+    // VALIDASI NAMA
+    // ========================================
+
+    if (!editForm.name.trim()) {
+      setEditError(
+        "Nama variant wajib diisi."
+      );
+      return;
+    }
+
+    // ========================================
+    // VALIDASI HARGA
+    // ========================================
+
+    if (
+      editForm.price === "" ||
+      Number(editForm.price) < 0
+    ) {
+      setEditError(
+        "Harga variant tidak valid."
+      );
+      return;
+    }
+
+    try {
+      setEditSaving(true);
+
+      await updateVariant(
+        editingVariant.id,
+        {
+          name:
+            editForm.name.trim(),
+
+          price:
+            Number(editForm.price),
+
+          sort_order:
+            Number(editForm.sort_order) || 0,
+        }
+      );
+
+      setShowEditModal(false);
+      setEditingVariant(null);
+
+      await loadData();
+
+      alert(
+        "Variant berhasil diperbarui."
+      );
+    } catch (error) {
+      console.error(
+        "Gagal memperbarui variant:",
+        error
+      );
+
+      const message =
+        error?.response?.data?.message ||
+        "Variant gagal diperbarui.";
+
+      setEditError(message);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  // ========================================
+  // DELETE VARIANT
+  // ========================================
+
+  const handleDeleteVariant = async (
+    variant
+  ) => {
+    const variantName =
+      variant.name ??
+      variant.variant_name ??
+      variant.title ??
+      "Variant";
+
+    const confirmed =
+      window.confirm(
+        `Apakah kamu yakin ingin menghapus variant "${variantName}"?`
+      );
+
+    if (!confirmed) return;
+
+    try {
+      setDeletingId(variant.id);
+
+      await deleteVariant(
+        variant.id
+      );
+
+      await loadData();
+
+      alert(
+        "Variant berhasil dihapus."
+      );
+    } catch (error) {
+      console.error(
+        "Gagal menghapus variant:",
+        error
+      );
+
+      alert(
+        error?.response?.data?.message ||
+          "Variant gagal dihapus."
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // ========================================
+  // RENDER
+  // ========================================
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        backgroundColor: "#f7f5f6",
-      }}
-    >
+    <div className="variant-page">
+
       <AdminSidebar />
 
-      <main
-        style={{
-          marginLeft: "240px",
-          width: "calc(100% - 240px)",
-          minHeight: "100vh",
-          padding: "32px",
-          boxSizing: "border-box",
-        }}
-      >
-        {/* HEADER */}
+      <main className="variant-main">
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "28px",
-          }}
-        >
+        {/* ========================================
+            HEADER
+        ======================================== */}
+
+        <div className="variant-header">
+
           <div>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: "28px",
-                fontWeight: "700",
-                color: "#211b1d",
-              }}
-            >
+            <h1>
               Variant Menu
             </h1>
 
-            <p
-              style={{
-                margin: "8px 0 0",
-                fontSize: "14px",
-                color: "#777",
-              }}
-            >
-              Kelola pilihan variant dan harga tambahan menu.
+            <p>
+              Kelola pilihan variant
+              untuk menu restoran.
             </p>
           </div>
 
           <button
             type="button"
-            style={{
-              border: "none",
-              backgroundColor: "#8f2638",
-              color: "#ffffff",
-              padding: "12px 18px",
-              borderRadius: "8px",
-              fontSize: "13px",
-              fontWeight: "600",
-              cursor: "pointer",
-            }}
+            className="variant-add-button"
+            onClick={
+              handleOpenAddModal
+            }
           >
             + Tambah Variant
           </button>
+
         </div>
 
-        {/* STATISTIC CARDS */}
+        {/* ========================================
+            STATISTIK
+        ======================================== */}
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: "20px",
-            marginBottom: "24px",
-          }}
-        >
-          <div style={statCardStyle}>
-            <span style={statLabelStyle}>
-              Total Variant
-            </span>
+        <div className="variant-stats">
 
-            <h2 style={statValueStyle}>
-              6
-            </h2>
+          <div className="variant-stat-card">
 
-            <span style={statDescriptionStyle}>
-              Semua variant menu
-            </span>
-          </div>
-
-          <div style={statCardStyle}>
-            <span style={statLabelStyle}>
-              Variant Aktif
-            </span>
-
-            <h2
-              style={{
-                ...statValueStyle,
-                color: "#4f8a62",
-              }}
-            >
-              6
-            </h2>
-
-            <span style={statDescriptionStyle}>
-              Siap dipilih pelanggan
-            </span>
-          </div>
-
-          <div style={statCardStyle}>
-            <span style={statLabelStyle}>
-              Menu Dengan Variant
-            </span>
-
-            <h2 style={statValueStyle}>
-              2
-            </h2>
-
-            <span style={statDescriptionStyle}>
-              Menu memiliki pilihan
-            </span>
-          </div>
-
-          <div style={statCardStyle}>
-            <span style={statLabelStyle}>
-              Variant Terpopuler
-            </span>
-
-            <h2
-              style={{
-                ...statValueStyle,
-                fontSize: "22px",
-              }}
-            >
-              Level 2
-            </h2>
-
-            <span style={statDescriptionStyle}>
-              Spicy Ramen
-            </span>
-          </div>
-        </div>
-
-        {/* FILTER */}
-
-        <div
-          style={{
-            backgroundColor: "#ffffff",
-            border: "1px solid #eee",
-            borderRadius: "14px",
-            padding: "18px 20px",
-            marginBottom: "24px",
-            display: "flex",
-            gap: "12px",
-            alignItems: "center",
-          }}
-        >
-          <input
-            type="text"
-            placeholder="Cari variant atau nama menu..."
-            style={{
-              flex: 1,
-              height: "42px",
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              padding: "0 13px",
-              fontSize: "12px",
-              outline: "none",
-            }}
-          />
-
-          <select
-            style={{
-              width: "170px",
-              height: "42px",
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              padding: "0 12px",
-              fontSize: "12px",
-              color: "#555",
-              backgroundColor: "#ffffff",
-            }}
-          >
-            <option>Semua Menu</option>
-            <option>Spicy Ramen</option>
-            <option>Chicken Ramen</option>
-          </select>
-
-          <select
-            style={{
-              width: "150px",
-              height: "42px",
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-              padding: "0 12px",
-              fontSize: "12px",
-              color: "#555",
-              backgroundColor: "#ffffff",
-            }}
-          >
-            <option>Semua Status</option>
-            <option>Aktif</option>
-            <option>Nonaktif</option>
-          </select>
-        </div>
-
-        {/* MAIN CONTENT */}
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "2fr 1fr",
-            gap: "24px",
-          }}
-        >
-          {/* VARIANT TABLE */}
-
-          <div
-            style={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                padding: "20px 22px",
-                borderBottom: "1px solid #eee",
-              }}
-            >
-              <h2
-                style={{
-                  margin: 0,
-                  fontSize: "18px",
-                  fontWeight: "700",
-                  color: "#211b1d",
-                }}
-              >
-                Daftar Variant
-              </h2>
-
-              <p
-                style={{
-                  margin: "6px 0 0",
-                  fontSize: "12px",
-                  color: "#888",
-                }}
-              >
-                Daftar pilihan variant yang tersedia untuk pelanggan.
-              </p>
+            <div className="variant-stat-icon">
+              ◇
             </div>
 
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-              }}
-            >
-              <thead>
-                <tr
-                  style={{
-                    backgroundColor: "#faf9f9",
-                    textAlign: "left",
-                  }}
-                >
-                  <th style={tableHeaderStyle}>
-                    Menu
-                  </th>
+            <div>
+              <span>
+                Total Variant
+              </span>
 
-                  <th style={tableHeaderStyle}>
-                    Variant
-                  </th>
+              <strong>
+                {totalVariants}
+              </strong>
+            </div>
 
-                  <th style={tableHeaderStyle}>
-                    Harga
-                  </th>
-
-                  <th style={tableHeaderStyle}>
-                    Status
-                  </th>
-
-                  <th
-                    style={{
-                      ...tableHeaderStyle,
-                      textAlign: "center",
-                    }}
-                  >
-                    Aksi
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {variants.map((item) => (
-                  <tr key={item.id}>
-                    <td style={tableCellStyle}>
-                      <strong
-                        style={{
-                          fontSize: "13px",
-                          color: "#211b1d",
-                        }}
-                      >
-                        {item.menu}
-                      </strong>
-                    </td>
-
-                    <td style={tableCellStyle}>
-                      <div>
-                        <strong
-                          style={{
-                            display: "block",
-                            fontSize: "13px",
-                            color: "#211b1d",
-                          }}
-                        >
-                          {item.variant}
-                        </strong>
-
-                        <span
-                          style={{
-                            display: "block",
-                            marginTop: "3px",
-                            fontSize: "11px",
-                            color: "#999",
-                          }}
-                        >
-                          {item.description}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td style={tableCellStyle}>
-                      <strong
-                        style={{
-                          fontSize: "12px",
-                          color: "#8f2638",
-                        }}
-                      >
-                        {item.price}
-                      </strong>
-                    </td>
-
-                    <td style={tableCellStyle}>
-                      <span
-                        style={{
-                          display: "inline-block",
-                          padding: "6px 10px",
-                          borderRadius: "6px",
-                          backgroundColor: "#e9f5ec",
-                          color: "#4f8a62",
-                          fontSize: "10px",
-                          fontWeight: "600",
-                        }}
-                      >
-                        {item.status}
-                      </span>
-                    </td>
-
-                    <td
-                      style={{
-                        ...tableCellStyle,
-                        textAlign: "center",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "center",
-                          gap: "7px",
-                        }}
-                      >
-                        <button
-                          type="button"
-                          style={actionButtonStyle}
-                        >
-                          Edit
-                        </button>
-
-                        <button
-                          type="button"
-                          style={{
-                            ...actionButtonStyle,
-                            color: "#8f2638",
-                          }}
-                        >
-                          Hapus
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
 
-          {/* VARIANT INFORMATION */}
+          <div className="variant-stat-card">
 
-          <div
-            style={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              padding: "22px",
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "18px",
-                fontWeight: "700",
-                color: "#211b1d",
-              }}
-            >
-              Distribusi Variant
-            </h2>
+            <div className="variant-stat-icon">
+              ▦
+            </div>
 
-            <p
-              style={{
-                margin: "6px 0 22px",
-                fontSize: "12px",
-                color: "#888",
-              }}
-            >
-              Jumlah variant berdasarkan menu.
-            </p>
+            <div>
+              <span>
+                Menu Memiliki Variant
+              </span>
 
-            <VariantProgress
-              name="Spicy Ramen"
-              total="5 variant"
-              percentage="83%"
-            />
+              <strong>
+                {totalMenusWithVariant}
+              </strong>
+            </div>
 
-            <VariantProgress
-              name="Chicken Ramen"
-              total="1 variant"
-              percentage="17%"
-            />
+          </div>
 
-            {/* INFO CARD */}
+          <div className="variant-stat-card">
 
-            <div
-              style={{
-                marginTop: "26px",
-                padding: "16px",
-                borderRadius: "10px",
-                backgroundColor: "#f7f5f6",
-              }}
-            >
-              <span
-                style={{
-                  display: "block",
-                  fontSize: "11px",
-                  color: "#888",
-                }}
-              >
-                Prinsip Variant
+            <div className="variant-stat-icon">
+              ★
+            </div>
+
+            <div>
+              <span>
+                Variant Terbanyak
               </span>
 
               <strong
                 style={{
-                  display: "block",
-                  marginTop: "6px",
-                  fontSize: "14px",
-                  color: "#211b1d",
+                  fontSize:
+                    "16px",
+                  maxWidth:
+                    "150px",
+                  overflow:
+                    "hidden",
+                  textOverflow:
+                    "ellipsis",
+                  whiteSpace:
+                    "nowrap",
                 }}
               >
-                Satu menu dapat memiliki beberapa pilihan.
+                {popularVariant}
               </strong>
-
-              <p
-                style={{
-                  margin: "8px 0 0",
-                  fontSize: "11px",
-                  lineHeight: "1.6",
-                  color: "#777",
-                }}
-              >
-                Variant digunakan ketika pelanggan perlu memilih
-                opsi tertentu sebelum menambahkan menu ke keranjang.
-              </p>
             </div>
 
-            {/* SPICY LEVEL */}
+          </div>
 
-            <div
-              style={{
-                marginTop: "18px",
-                padding: "16px",
-                borderRadius: "10px",
-                border: "1px solid #eee",
-              }}
-            >
-              <span
-                style={{
-                  display: "block",
-                  fontSize: "11px",
-                  color: "#888",
-                }}
-              >
-                Contoh Variant
-              </span>
+        </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginTop: "10px",
-                }}
-              >
-                <strong
-                  style={{
-                    fontSize: "13px",
-                    color: "#211b1d",
-                  }}
+        {/* ========================================
+            FILTER
+        ======================================== */}
+
+        <div className="variant-filter-card">
+
+          <div className="variant-search">
+
+            <span>
+              ⌕
+            </span>
+
+            <input
+              type="text"
+              placeholder="Cari variant atau menu..."
+              value={search}
+              onChange={(event) =>
+                setSearch(
+                  event.target.value
+                )
+              }
+            />
+
+          </div>
+
+          <select
+            value={menuFilter}
+            onChange={(event) =>
+              setMenuFilter(
+                event.target.value
+              )
+            }
+          >
+
+            <option value="all">
+              Semua Menu
+            </option>
+
+            {menus.map(
+              (menu) => (
+                <option
+                  key={menu.id}
+                  value={menu.id}
                 >
-                  Spicy Ramen
-                </strong>
+                  {menu.name}
+                </option>
+              )
+            )}
 
-                <span
-                  style={{
-                    fontSize: "11px",
-                    color: "#8f2638",
-                    fontWeight: "600",
-                  }}
-                >
-                  5 Level
-                </span>
+          </select>
+
+        </div>
+
+        {/* ========================================
+            CONTENT
+        ======================================== */}
+
+        <div className="variant-content-grid">
+
+          {/* ========================================
+              TABLE
+          ======================================== */}
+
+          <div className="variant-table-card">
+
+            <div className="variant-card-header">
+
+              <div>
+
+                <h2>
+                  Daftar Variant
+                </h2>
+
+                <p>
+                  Menampilkan{" "}
+                  {
+                    filteredVariants.length
+                  }{" "}
+                  variant
+                </p>
+
               </div>
+
             </div>
+
+            {loading ? (
+
+              <div className="variant-loading">
+                Memuat data variant...
+              </div>
+
+            ) : filteredVariants.length ===
+              0 ? (
+
+              <div className="variant-empty">
+
+                <div className="variant-empty-icon">
+                  ◇
+                </div>
+
+                <h3>
+                  Belum ada variant
+                </h3>
+
+                <p>
+                  Tambahkan variant
+                  untuk menu restoran.
+                </p>
+
+              </div>
+
+            ) : (
+
+              <div className="variant-table-wrapper">
+
+                <table className="variant-table">
+
+                  <thead>
+
+                    <tr>
+
+                      <th>
+                        VARIANT
+                      </th>
+
+                      <th>
+                        MENU
+                      </th>
+
+                      <th>
+                        HARGA
+                      </th>
+
+                      <th>
+                        AKSI
+                      </th>
+
+                    </tr>
+
+                  </thead>
+
+                  <tbody>
+
+                    {filteredVariants.map(
+                      (variant) => {
+
+                        const variantName =
+                          variant.name ??
+                          variant.variant_name ??
+                          variant.title ??
+                          "-";
+
+                        const price =
+                          Number(
+                            variant.price ??
+                              variant.additional_price ??
+                              variant.extra_price ??
+                              0
+                          );
+
+                        return (
+
+                          <tr
+                            key={
+                              variant.id
+                            }
+                          >
+
+                            <td>
+
+                              <div className="variant-name-cell">
+
+                                <div className="variant-name-icon">
+                                  ◇
+                                </div>
+
+                                <div>
+
+                                  <strong>
+                                    {
+                                      variantName
+                                    }
+                                  </strong>
+
+                                  <small>
+                                    Urutan{" "}
+                                    {
+                                      variant.sort_order ??
+                                      0
+                                    }
+                                  </small>
+
+                                </div>
+
+                              </div>
+
+                            </td>
+
+                            <td>
+
+                              <span className="variant-menu-name">
+                                {
+                                  variant.menu_name ??
+                                  "-"
+                                }
+                              </span>
+
+                            </td>
+
+                            <td>
+                              Rp{" "}
+                              {price.toLocaleString(
+                                "id-ID"
+                              )}
+                            </td>
+
+                            <td>
+
+                              <div className="variant-action-buttons">
+
+                                <button
+                                  type="button"
+                                  className="variant-edit-button"
+                                  onClick={() =>
+                                    handleOpenEditModal(
+                                      variant
+                                    )
+                                  }
+                                >
+                                  Edit
+                                </button>
+
+                                <button
+                                  type="button"
+                                  className="variant-delete-button"
+                                  disabled={
+                                    deletingId ===
+                                    variant.id
+                                  }
+                                  onClick={() =>
+                                    handleDeleteVariant(
+                                      variant
+                                    )
+                                  }
+                                >
+                                  {deletingId ===
+                                  variant.id
+                                    ? "..."
+                                    : "Hapus"}
+                                </button>
+
+                              </div>
+
+                            </td>
+
+                          </tr>
+
+                        );
+                      }
+                    )}
+
+                  </tbody>
+
+                </table>
+
+              </div>
+
+            )}
+
           </div>
+
+          {/* ========================================
+              DISTRIBUSI
+          ======================================== */}
+
+          <div className="variant-distribution-card">
+
+            <div className="variant-card-header">
+
+              <div>
+
+                <h2>
+                  Distribusi Variant
+                </h2>
+
+                <p>
+                  Jumlah variant setiap menu
+                </p>
+
+              </div>
+
+            </div>
+
+            <div className="variant-distribution-list">
+
+              {menus.length === 0 ? (
+
+                <div className="variant-no-menu">
+                  Belum ada menu.
+                </div>
+
+              ) : (
+
+                menus.map(
+                  (menu) => {
+
+                    const count =
+                      variants.filter(
+                        (variant) =>
+                          Number(
+                            variant.menu_id
+                          ) ===
+                          Number(
+                            menu.id
+                          )
+                      ).length;
+
+                    const maxCount =
+                      Math.max(
+                        ...menus.map(
+                          (item) =>
+                            variants.filter(
+                              (variant) =>
+                                Number(
+                                  variant.menu_id
+                                ) ===
+                                Number(
+                                  item.id
+                                )
+                            ).length
+                        ),
+                        1
+                      );
+
+                    const percentage =
+                      (count /
+                        maxCount) *
+                      100;
+
+                    return (
+
+                      <div
+                        className="variant-distribution-item"
+                        key={
+                          menu.id
+                        }
+                      >
+
+                        <div className="variant-distribution-info">
+
+                          <span>
+                            {
+                              menu.name
+                            }
+                          </span>
+
+                          <strong>
+                            {count}
+                          </strong>
+
+                        </div>
+
+                        <div className="variant-progress">
+
+                          <div
+                            className="variant-progress-bar"
+                            style={{
+                              width: `${percentage}%`,
+                            }}
+                          />
+
+                        </div>
+
+                      </div>
+
+                    );
+                  }
+                )
+
+              )}
+
+            </div>
+
+          </div>
+
         </div>
 
-        {/* BOTTOM INFORMATION */}
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "24px",
-            marginTop: "24px",
-          }}
-        >
-          {/* ACTIVE */}
-
-          <div
-            style={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              padding: "22px",
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "17px",
-                color: "#211b1d",
-              }}
-            >
-              Status Variant
-            </h2>
-
-            <p
-              style={{
-                margin: "6px 0 18px",
-                fontSize: "12px",
-                color: "#888",
-              }}
-            >
-              Ringkasan status variant menu.
-            </p>
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "13px 0",
-                borderBottom: "1px solid #eee",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "13px",
-                  color: "#555",
-                }}
-              >
-                Variant aktif
-              </span>
-
-              <strong
-                style={{
-                  fontSize: "15px",
-                  color: "#4f8a62",
-                }}
-              >
-                6
-              </strong>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "13px 0",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "13px",
-                  color: "#555",
-                }}
-              >
-                Variant nonaktif
-              </span>
-
-              <strong
-                style={{
-                  fontSize: "15px",
-                  color: "#8f2638",
-                }}
-              >
-                0
-              </strong>
-            </div>
-          </div>
-
-          {/* PRICE INFORMATION */}
-
-          <div
-            style={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              padding: "22px",
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "17px",
-                color: "#211b1d",
-              }}
-            >
-              Informasi Harga
-            </h2>
-
-            <p
-              style={{
-                margin: "6px 0 18px",
-                fontSize: "12px",
-                color: "#888",
-              }}
-            >
-              Pengaturan harga pada setiap variant.
-            </p>
-
-            <div
-              style={{
-                padding: "15px",
-                borderRadius: "10px",
-                backgroundColor: "#f7f5f6",
-              }}
-            >
-              <span
-                style={{
-                  display: "block",
-                  fontSize: "11px",
-                  color: "#888",
-                }}
-              >
-                Harga Variant Tertinggi
-              </span>
-
-              <strong
-                style={{
-                  display: "block",
-                  marginTop: "5px",
-                  fontSize: "19px",
-                  color: "#8f2638",
-                }}
-              >
-                Rp 38.000
-              </strong>
-
-              <span
-                style={{
-                  display: "block",
-                  marginTop: "4px",
-                  fontSize: "11px",
-                  color: "#777",
-                }}
-              >
-                Spicy Ramen — Level 4
-              </span>
-            </div>
-          </div>
-        </div>
       </main>
-    </div>
-  );
-}
 
-/* =========================
-   STATISTIC STYLE
-========================= */
+      {/* ========================================
+          MODAL TAMBAH VARIANT
+      ======================================== */}
 
-const statCardStyle = {
-  backgroundColor: "#ffffff",
-  border: "1px solid #eee",
-  borderRadius: "14px",
-  padding: "20px",
-};
+      {showAddModal && (
 
-const statLabelStyle = {
-  fontSize: "13px",
-  color: "#777",
-};
+        <div className="variant-modal-overlay">
 
-const statValueStyle = {
-  margin: "8px 0 0",
-  fontSize: "28px",
-  color: "#211b1d",
-};
+          <div className="variant-modal">
 
-const statDescriptionStyle = {
-  display: "block",
-  marginTop: "6px",
-  fontSize: "11px",
-  color: "#999",
-};
+            <div className="variant-modal-header">
 
-/* =========================
-   TABLE STYLE
-========================= */
+              <div>
 
-const tableHeaderStyle = {
-  padding: "14px 18px",
-  fontSize: "11px",
-  color: "#888",
-  fontWeight: "600",
-  borderBottom: "1px solid #eee",
-};
+                <h3>
+                  Tambah Variant
+                </h3>
 
-const tableCellStyle = {
-  padding: "16px 18px",
-  borderBottom: "1px solid #eee",
-  fontSize: "13px",
-};
+                <p>
+                  Tambahkan pilihan
+                  variant untuk menu.
+                </p>
 
-/* =========================
-   ACTION BUTTON
-========================= */
+              </div>
 
-const actionButtonStyle = {
-  border: "none",
-  backgroundColor: "#f7f5f6",
-  color: "#555",
-  padding: "7px 10px",
-  borderRadius: "6px",
-  fontSize: "10px",
-  fontWeight: "600",
-  cursor: "pointer",
-};
+              <button
+                type="button"
+                className="variant-modal-close"
+                onClick={
+                  handleCloseAddModal
+                }
+                disabled={
+                  saving
+                }
+              >
+                ×
+              </button>
 
-/* =========================
-   VARIANT PROGRESS
-========================= */
+            </div>
 
-function VariantProgress({
-  name,
-  total,
-  percentage,
-}) {
-  return (
-    <div
-      style={{
-        marginBottom: "18px",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginBottom: "7px",
-        }}
-      >
-        <span
-          style={{
-            fontSize: "12px",
-            color: "#555",
-          }}
-        >
-          {name}
-        </span>
+            <form
+              onSubmit={
+                handleAddVariant
+              }
+            >
 
-        <span
-          style={{
-            fontSize: "11px",
-            color: "#888",
-          }}
-        >
-          {total}
-        </span>
-      </div>
+              {formError && (
 
-      <div
-        style={{
-          height: "7px",
-          backgroundColor: "#eee",
-          borderRadius: "10px",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            width: percentage,
-            height: "100%",
-            backgroundColor: "#8f2638",
-            borderRadius: "10px",
-          }}
-        ></div>
-      </div>
+                <div className="variant-form-error">
+                  {formError}
+                </div>
+
+              )}
+
+              {/* MENU */}
+
+              <div className="variant-form-group">
+
+                <label>
+                  Menu
+                </label>
+
+                <select
+                  name="menu_id"
+                  value={
+                    addForm.menu_id
+                  }
+                  onChange={
+                    handleAddChange
+                  }
+                  required
+                >
+
+                  <option value="">
+                    Pilih menu
+                  </option>
+
+                  {menus.map(
+                    (menu) => (
+
+                      <option
+                        key={
+                          menu.id
+                        }
+                        value={
+                          menu.id
+                        }
+                      >
+                        {menu.name}
+                      </option>
+
+                    )
+                  )}
+
+                </select>
+
+              </div>
+
+              {/* NAMA */}
+
+              <div className="variant-form-group">
+
+                <label>
+                  Nama Variant
+                </label>
+
+                <input
+                  type="text"
+                  name="name"
+                  value={
+                    addForm.name
+                  }
+                  onChange={
+                    handleAddChange
+                  }
+                  placeholder="Contoh: Level 1"
+                  required
+                />
+
+              </div>
+
+              {/* HARGA DAN URUTAN */}
+
+              <div className="variant-form-row">
+
+                <div className="variant-form-group">
+
+                  <label>
+                    Harga Tambahan
+                  </label>
+
+                  <input
+                    type="number"
+                    name="price"
+                    value={
+                      addForm.price
+                    }
+                    onChange={
+                      handleAddChange
+                    }
+                    placeholder="0"
+                    min="0"
+                    required
+                  />
+
+                  <small>
+                    Isi 0 jika tidak
+                    ada tambahan harga.
+                  </small>
+
+                </div>
+
+                <div className="variant-form-group">
+
+                  <label>
+                    Urutan
+                  </label>
+
+                  <input
+                    type="number"
+                    name="sort_order"
+                    value={
+                      addForm.sort_order
+                    }
+                    onChange={
+                      handleAddChange
+                    }
+                    min="0"
+                  />
+
+                </div>
+
+              </div>
+
+              {/* ACTION */}
+
+              <div className="variant-modal-actions">
+
+                <button
+                  type="button"
+                  className="variant-btn-cancel"
+                  onClick={
+                    handleCloseAddModal
+                  }
+                  disabled={
+                    saving
+                  }
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="submit"
+                  className="variant-btn-save"
+                  disabled={
+                    saving
+                  }
+                >
+                  {saving
+                    ? "Menyimpan..."
+                    : "Simpan Variant"}
+                </button>
+
+              </div>
+
+            </form>
+
+          </div>
+
+        </div>
+
+      )}
+
+      {/* ========================================
+          MODAL EDIT VARIANT
+      ======================================== */}
+
+      {showEditModal &&
+        editingVariant && (
+
+          <div className="variant-modal-overlay">
+
+            <div className="variant-modal">
+
+              <div className="variant-modal-header">
+
+                <div>
+
+                  <h3>
+                    Edit Variant
+                  </h3>
+
+                  <p>
+                    Perbarui informasi
+                    variant menu.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  className="variant-modal-close"
+                  onClick={
+                    handleCloseEditModal
+                  }
+                  disabled={
+                    editSaving
+                  }
+                >
+                  ×
+                </button>
+
+              </div>
+
+              <form
+                onSubmit={
+                  handleEditVariant
+                }
+              >
+
+                {editError && (
+
+                  <div className="variant-form-error">
+                    {editError}
+                  </div>
+
+                )}
+
+                {/* NAMA */}
+
+                <div className="variant-form-group">
+
+                  <label>
+                    Nama Variant
+                  </label>
+
+                  <input
+                    type="text"
+                    name="name"
+                    value={
+                      editForm.name
+                    }
+                    onChange={
+                      handleEditChange
+                    }
+                    required
+                  />
+
+                </div>
+
+                {/* HARGA DAN URUTAN */}
+
+                <div className="variant-form-row">
+
+                  <div className="variant-form-group">
+
+                    <label>
+                      Harga Tambahan
+                    </label>
+
+                    <input
+                      type="number"
+                      name="price"
+                      value={
+                        editForm.price
+                      }
+                      onChange={
+                        handleEditChange
+                      }
+                      min="0"
+                      required
+                    />
+
+                  </div>
+
+                  <div className="variant-form-group">
+
+                    <label>
+                      Urutan
+                    </label>
+
+                    <input
+                      type="number"
+                      name="sort_order"
+                      value={
+                        editForm.sort_order
+                      }
+                      onChange={
+                        handleEditChange
+                      }
+                      min="0"
+                    />
+
+                  </div>
+
+                </div>
+
+                {/* ACTION */}
+
+                <div className="variant-modal-actions">
+
+                  <button
+                    type="button"
+                    className="variant-btn-cancel"
+                    onClick={
+                      handleCloseEditModal
+                    }
+                    disabled={
+                      editSaving
+                    }
+                  >
+                    Batal
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="variant-btn-save"
+                    disabled={
+                      editSaving
+                    }
+                  >
+                    {editSaving
+                      ? "Menyimpan..."
+                      : "Simpan Perubahan"}
+                  </button>
+
+                </div>
+
+              </form>
+
+            </div>
+
+          </div>
+
+        )}
+
     </div>
   );
 }

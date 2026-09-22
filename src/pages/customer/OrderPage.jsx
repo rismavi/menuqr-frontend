@@ -23,9 +23,20 @@ function OrderPage() {
   const savedTable =
     localStorage.getItem("restaurantTable");
 
-  const parsedTable = savedTable
-    ? JSON.parse(savedTable)
-    : null;
+  let parsedTable = null;
+
+  try {
+    parsedTable = savedTable
+      ? JSON.parse(savedTable)
+      : null;
+  } catch (parseError) {
+    console.error(
+      "Gagal membaca data restaurantTable:",
+      parseError
+    );
+
+    parsedTable = null;
+  }
 
   const table =
     parsedTable?.table ||
@@ -131,6 +142,18 @@ function OrderPage() {
     }
 
     // -------------------------------------------------------
+    // VALIDASI MEJA
+    // -------------------------------------------------------
+
+    if (!table?.id) {
+      setError(
+        "Data meja tidak ditemukan. Silakan kembali ke menu dan scan QR Code meja."
+      );
+
+      return;
+    }
+
+    // -------------------------------------------------------
     // VALIDASI KERANJANG
     // -------------------------------------------------------
 
@@ -166,29 +189,57 @@ function OrderPage() {
       );
 
       // =====================================================
+      // VALIDASI RESTAURANT ID
+      // =====================================================
+
+      const restaurantId =
+        cartItems[0]?.restaurantId ||
+        table?.restaurant_id ||
+        table?.restaurantId ||
+        table?.restaurant?.id;
+
+      if (!restaurantId) {
+        throw new Error(
+          "Restaurant ID tidak ditemukan dari data pesanan."
+        );
+      }
+
+      // =====================================================
       // 2. BUAT DATA PESANAN
       // =====================================================
 
       const orderData = {
-        // Restaurant
+        // ---------------------------------------------------
+        // RESTAURANT
+        // ---------------------------------------------------
+
         restaurant_id:
-          cartItems[0]?.restaurantId,
+          restaurantId,
 
-        // Meja
+        // ---------------------------------------------------
+        // MEJA
+        // ---------------------------------------------------
+
         table_id:
-          table?.id || null,
+          table.id,
 
-        // Pelanggan
+        // ---------------------------------------------------
+        // PELANGGAN
+        // ---------------------------------------------------
+
         customer_name:
           name.trim(),
 
-        // Catatan
+        // ---------------------------------------------------
+        // CATATAN
+        // ---------------------------------------------------
+
         note:
           notes.trim() || null,
 
-        // ===================================================
-        // LOKASI
-        // ===================================================
+        // ---------------------------------------------------
+        // LOKASI PELANGGAN
+        // ---------------------------------------------------
 
         latitude:
           location.latitude,
@@ -196,9 +247,9 @@ function OrderPage() {
         longitude:
           location.longitude,
 
-        // ===================================================
+        // ---------------------------------------------------
         // ITEM PESANAN
-        // ===================================================
+        // ---------------------------------------------------
 
         items: cartItems.map(
           (item) => ({
@@ -219,7 +270,8 @@ function OrderPage() {
             quantity:
               item.quantity,
 
-            note: null,
+            note:
+              null,
           })
         ),
       };
@@ -246,21 +298,66 @@ function OrderPage() {
       );
 
       // =====================================================
-      // 4. AMBIL ID PESANAN
+      // 4. AMBIL DATA ORDER DARI RESPONSE
+      // =====================================================
+
+      /*
+       * Backend mengembalikan:
+       *
+       * {
+       *   message: "Pesanan berhasil dibuat",
+       *   data: {
+       *     id: 23,
+       *     order_code: "ORD-XXXXXXXX",
+       *     ...
+       *   }
+       * }
+       */
+
+      const order =
+        result?.data;
+
+      console.log(
+        "Data order:",
+        order
+      );
+
+      // =====================================================
+      // AMBIL ID ORDER
       // =====================================================
 
       const orderId =
-        result?.data?.id ||
-        result?.id;
+        order?.id;
 
       console.log(
         "ID Pesanan:",
         orderId
       );
 
-      if (!orderId) {
+      // =====================================================
+      // AMBIL ORDER CODE
+      // =====================================================
+
+      const orderCode =
+        order?.order_code;
+
+      console.log(
+        "Order Code:",
+        orderCode
+      );
+
+      // =====================================================
+      // VALIDASI ORDER CODE
+      // =====================================================
+
+      if (!orderCode) {
+        console.error(
+          "Order code tidak ditemukan.",
+          result
+        );
+
         throw new Error(
-          "ID pesanan tidak ditemukan dari response backend."
+          "Kode pesanan tidak ditemukan dari response backend."
         );
       }
 
@@ -268,9 +365,14 @@ function OrderPage() {
       // 5. AMBIL LINK WHATSAPP
       // =====================================================
 
+      console.log(
+        "Mengambil link WhatsApp berdasarkan order code:",
+        orderCode
+      );
+
       const whatsappResult =
         await getWhatsAppUrl(
-          orderId
+          orderCode
         );
 
       console.log(
@@ -279,12 +381,21 @@ function OrderPage() {
       );
 
       // =====================================================
-      // 6. BUKA WHATSAPP
+      // 6. AMBIL WHATSAPP URL
       // =====================================================
 
       const whatsappUrl =
         whatsappResult?.whatsapp_url ||
         whatsappResult?.data?.whatsapp_url;
+
+      console.log(
+        "WhatsApp URL:",
+        whatsappUrl
+      );
+
+      // =====================================================
+      // 7. BUKA WHATSAPP
+      // =====================================================
 
       if (whatsappUrl) {
         window.open(
@@ -361,7 +472,10 @@ function OrderPage() {
         const backendData =
           err.response.data;
 
-        // Pesan utama dari backend
+        // ---------------------------------------------------
+        // PESAN UTAMA BACKEND
+        // ---------------------------------------------------
+
         if (
           backendData.message
         ) {
@@ -372,7 +486,10 @@ function OrderPage() {
           return;
         }
 
-        // Jika error berbentuk validation errors
+        // ---------------------------------------------------
+        // VALIDATION ERRORS
+        // ---------------------------------------------------
+
         if (
           backendData.errors
         ) {
@@ -397,7 +514,8 @@ function OrderPage() {
       // =====================================================
 
       setError(
-        "Gagal membuat pesanan. Silakan coba lagi."
+        err?.message ||
+          "Gagal membuat pesanan. Silakan coba lagi."
       );
 
     } finally {
@@ -644,10 +762,13 @@ function OrderPage() {
               <div className="order-form-group">
 
                 <label htmlFor="customer-name">
+
                   Nama
+
                   <span className="required-mark">
                     *
                   </span>
+
                 </label>
 
                 <input
@@ -659,6 +780,7 @@ function OrderPage() {
                     setName(
                       e.target.value
                     );
+
                     setError("");
                   }}
                 />
@@ -674,10 +796,13 @@ function OrderPage() {
               <div className="order-form-group">
 
                 <label htmlFor="customer-phone">
+
                   Nomor WhatsApp
+
                   <span className="required-mark">
                     *
                   </span>
+
                 </label>
 
                 <input
@@ -689,6 +814,7 @@ function OrderPage() {
                     setPhone(
                       e.target.value
                     );
+
                     setError("");
                   }}
                 />

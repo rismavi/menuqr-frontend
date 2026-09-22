@@ -1,53 +1,308 @@
+import { useEffect, useMemo, useState } from "react";
 import AdminSidebar from "../../components/admin/AdminSidebar";
 
+import {
+  getMenuAddons,
+  createAddon,
+  updateAddon,
+  deleteAddon,
+} from "../../services/addonService";
+
+import { getAdminMenus } from "../../services/menuService";
+
 function AddonPage() {
-  const addons = [
-    {
-      id: 1,
-      name: "Extra Egg",
-      description: "Tambahan telur untuk menu ramen.",
-      price: "Rp 5.000",
-      sold: 38,
-      stock: "Tersedia",
-      status: "Aktif",
+  const [menus, setMenus] = useState([]);
+  const [addons, setAddons] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const [search, setSearch] = useState("");
+  const [menuFilter, setMenuFilter] = useState("");
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+
+  const [editingAddon, setEditingAddon] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+
+  const [addForm, setAddForm] = useState({
+    menu_id: "",
+    name: "",
+    price: "",
+  });
+
+  const [editForm, setEditForm] = useState({
+    name: "",
+    price: "",
+  });
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const menuResponse = await getAdminMenus();
+
+      const menuList =
+        menuResponse?.data ||
+        menuResponse ||
+        [];
+
+      setMenus(menuList);
+
+      const allAddons = [];
+
+      for (const menu of menuList) {
+        try {
+          const addonResponse = await getMenuAddons(menu.id);
+
+          const addonList =
+            addonResponse?.data ||
+            addonResponse ||
+            [];
+
+          addonList.forEach((addon) => {
+            allAddons.push({
+              ...addon,
+              menu_id: menu.id,
+              menu_name: menu.name,
+            });
+          });
+        } catch (addonError) {
+          console.error(
+            `Gagal mengambil addon menu ${menu.id}:`,
+            addonError
+          );
+        }
+      }
+
+      setAddons(allAddons);
+    } catch (err) {
+      console.error("Gagal mengambil data addon:", err);
+
+      setError(
+        err.response?.data?.message ||
+          "Gagal mengambil data add-on."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* =========================
+     FILTER
+  ========================= */
+
+  const filteredAddons = useMemo(() => {
+    return addons.filter((addon) => {
+      const keyword = search.toLowerCase().trim();
+
+      const matchesSearch =
+        !keyword ||
+        addon.name?.toLowerCase().includes(keyword) ||
+        addon.description?.toLowerCase().includes(keyword) ||
+        addon.menu_name?.toLowerCase().includes(keyword);
+
+      const matchesMenu =
+        !menuFilter ||
+        String(addon.menu_id) === String(menuFilter);
+
+      return matchesSearch && matchesMenu;
+    });
+  }, [addons, search, menuFilter]);
+
+  /* =========================
+     STATISTICS
+  ========================= */
+
+  const totalAddons = addons.length;
+
+  const totalMenusWithAddon = new Set(
+    addons.map((addon) => addon.menu_id)
+  ).size;
+
+  const totalPrice = addons.reduce(
+    (total, addon) => {
+      return total + Number(addon.price || 0);
     },
-    {
-      id: 2,
-      name: "Extra Noodle",
-      description: "Tambahan mie untuk porsi lebih banyak.",
-      price: "Rp 7.000",
-      sold: 31,
-      stock: "Tersedia",
-      status: "Aktif",
-    },
-    {
-      id: 3,
-      name: "Chashu",
-      description: "Tambahan potongan chashu.",
-      price: "Rp 10.000",
-      sold: 27,
-      stock: "Tersedia",
-      status: "Aktif",
-    },
-    {
-      id: 4,
-      name: "Cheese",
-      description: "Tambahan keju untuk menu pilihan.",
-      price: "Rp 6.000",
-      sold: 19,
-      stock: "Tersedia",
-      status: "Aktif",
-    },
-    {
-      id: 5,
-      name: "Seaweed",
-      description: "Tambahan lembaran nori.",
-      price: "Rp 4.000",
-      sold: 14,
-      stock: "Habis",
-      status: "Aktif",
-    },
-  ];
+    0
+  );
+
+  const averagePrice =
+    totalAddons > 0
+      ? Math.round(totalPrice / totalAddons)
+      : 0;
+
+  const formatRupiah = (value) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      maximumFractionDigits: 0,
+    }).format(Number(value || 0));
+  };
+
+  /* =========================
+     ADD ADDON
+  ========================= */
+
+  const handleAddAddon = async (event) => {
+    event.preventDefault();
+
+    if (!addForm.menu_id) {
+      setError("Silakan pilih menu terlebih dahulu.");
+      return;
+    }
+
+    if (!addForm.name.trim()) {
+      setError("Nama add-on wajib diisi.");
+      return;
+    }
+
+    if (
+      addForm.price === "" ||
+      Number(addForm.price) < 0
+    ) {
+      setError("Harga add-on tidak valid.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+
+      await createAddon(addForm.menu_id, {
+        name: addForm.name.trim(),
+        price: Number(addForm.price),
+      });
+
+      setShowAddModal(false);
+
+      setAddForm({
+        menu_id: "",
+        name: "",
+        price: "",
+      });
+
+      await loadData();
+    } catch (err) {
+      console.error("Gagal menambahkan addon:", err);
+
+      setError(
+        err.response?.data?.message ||
+          "Gagal menambahkan add-on."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* =========================
+     OPEN EDIT
+  ========================= */
+
+  const handleOpenEdit = (addon) => {
+    setEditingAddon(addon);
+
+    setEditForm({
+      name: addon.name || "",
+      price: addon.price ?? "",
+    });
+
+    setError("");
+    setShowEditModal(true);
+  };
+
+  /* =========================
+     UPDATE ADDON
+  ========================= */
+
+  const handleUpdateAddon = async (event) => {
+    event.preventDefault();
+
+    if (!editingAddon) {
+      return;
+    }
+
+    if (!editForm.name.trim()) {
+      setError("Nama add-on wajib diisi.");
+      return;
+    }
+
+    if (
+      editForm.price === "" ||
+      Number(editForm.price) < 0
+    ) {
+      setError("Harga add-on tidak valid.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+
+      await updateAddon(editingAddon.id, {
+        name: editForm.name.trim(),
+        price: Number(editForm.price),
+      });
+
+      setShowEditModal(false);
+      setEditingAddon(null);
+
+      setEditForm({
+        name: "",
+        price: "",
+      });
+
+      await loadData();
+    } catch (err) {
+      console.error("Gagal mengubah addon:", err);
+
+      setError(
+        err.response?.data?.message ||
+          "Gagal mengubah add-on."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* =========================
+     DELETE ADDON
+  ========================= */
+
+  const handleDeleteAddon = async (addon) => {
+    const confirmed = window.confirm(
+      `Apakah kamu yakin ingin menghapus add-on "${addon.name}"?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingId(addon.id);
+      setError("");
+
+      await deleteAddon(addon.id);
+
+      await loadData();
+    } catch (err) {
+      console.error("Gagal menghapus addon:", err);
+
+      setError(
+        err.response?.data?.message ||
+          "Gagal menghapus add-on."
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div
@@ -68,7 +323,9 @@ function AddonPage() {
           boxSizing: "border-box",
         }}
       >
-        {/* HEADER */}
+        {/* =========================
+            HEADER
+        ========================= */}
 
         <div
           style={{
@@ -103,6 +360,17 @@ function AddonPage() {
 
           <button
             type="button"
+            onClick={() => {
+              setError("");
+
+              setAddForm({
+                menu_id: "",
+                name: "",
+                price: "",
+              });
+
+              setShowAddModal(true);
+            }}
             style={{
               border: "none",
               backgroundColor: "#8f2638",
@@ -118,12 +386,34 @@ function AddonPage() {
           </button>
         </div>
 
-        {/* STATISTIC CARDS */}
+        {/* =========================
+            ERROR
+        ========================= */}
+
+        {error && (
+          <div
+            style={{
+              marginBottom: "20px",
+              padding: "13px 16px",
+              borderRadius: "10px",
+              backgroundColor: "#fbeaec",
+              color: "#8f2638",
+              border: "1px solid #f0cdd2",
+              fontSize: "13px",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        {/* =========================
+            STATISTICS
+        ========================= */}
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
+            gridTemplateColumns: "repeat(3, 1fr)",
             gap: "20px",
             marginBottom: "24px",
           }}
@@ -134,7 +424,7 @@ function AddonPage() {
             </span>
 
             <h2 style={statValueStyle}>
-              5
+              {totalAddons}
             </h2>
 
             <span style={statDescriptionStyle}>
@@ -144,7 +434,7 @@ function AddonPage() {
 
           <div style={statCardStyle}>
             <span style={statLabelStyle}>
-              Add-on Aktif
+              Menu Memiliki Add-on
             </span>
 
             <h2
@@ -153,49 +443,37 @@ function AddonPage() {
                 color: "#4f8a62",
               }}
             >
-              5
+              {totalMenusWithAddon}
             </h2>
 
             <span style={statDescriptionStyle}>
-              Dapat dipilih pelanggan
+              Menu yang memiliki tambahan
             </span>
           </div>
 
           <div style={statCardStyle}>
             <span style={statLabelStyle}>
-              Stok Tersedia
-            </span>
-
-            <h2 style={statValueStyle}>
-              4
-            </h2>
-
-            <span style={statDescriptionStyle}>
-              Add-on siap digunakan
-            </span>
-          </div>
-
-          <div style={statCardStyle}>
-            <span style={statLabelStyle}>
-              Terlaris
+              Rata-rata Harga
             </span>
 
             <h2
               style={{
                 ...statValueStyle,
-                fontSize: "21px",
+                fontSize: "22px",
               }}
             >
-              Extra Egg
+              {formatRupiah(averagePrice)}
             </h2>
 
             <span style={statDescriptionStyle}>
-              38 terjual
+              Harga tambahan menu
             </span>
           </div>
         </div>
 
-        {/* FILTER */}
+        {/* =========================
+            FILTER
+        ========================= */}
 
         <div
           style={{
@@ -212,6 +490,10 @@ function AddonPage() {
           <input
             type="text"
             placeholder="Cari add-on atau topping..."
+            value={search}
+            onChange={(event) =>
+              setSearch(event.target.value)
+            }
             style={{
               flex: 1,
               height: "42px",
@@ -224,252 +506,43 @@ function AddonPage() {
           />
 
           <select
+            value={menuFilter}
+            onChange={(event) =>
+              setMenuFilter(event.target.value)
+            }
             style={filterSelectStyle}
           >
-            <option>Semua Status</option>
-            <option>Aktif</option>
-            <option>Nonaktif</option>
-          </select>
+            <option value="">
+              Semua Menu
+            </option>
 
-          <select
-            style={filterSelectStyle}
-          >
-            <option>Semua Stok</option>
-            <option>Tersedia</option>
-            <option>Habis</option>
+            {menus.map((menu) => (
+              <option
+                key={menu.id}
+                value={menu.id}
+              >
+                {menu.name}
+              </option>
+            ))}
           </select>
         </div>
 
-        {/* MAIN CONTENT */}
+        {/* =========================
+            MAIN CONTENT
+        ========================= */}
 
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "2fr 1fr",
-            gap: "24px",
+            backgroundColor: "#ffffff",
+            border: "1px solid #eee",
+            borderRadius: "14px",
+            overflow: "hidden",
           }}
         >
-          {/* ADDON TABLE */}
-
           <div
             style={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                padding: "20px 22px",
-                borderBottom: "1px solid #eee",
-              }}
-            >
-              <h2
-                style={{
-                  margin: 0,
-                  fontSize: "18px",
-                  fontWeight: "700",
-                  color: "#211b1d",
-                }}
-              >
-                Daftar Add-on
-              </h2>
-
-              <p
-                style={{
-                  margin: "6px 0 0",
-                  fontSize: "12px",
-                  color: "#888",
-                }}
-              >
-                Daftar tambahan yang tersedia pada restoran.
-              </p>
-            </div>
-
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-              }}
-            >
-              <thead>
-                <tr
-                  style={{
-                    backgroundColor: "#faf9f9",
-                    textAlign: "left",
-                  }}
-                >
-                  <th style={tableHeaderStyle}>
-                    Add-on
-                  </th>
-
-                  <th style={tableHeaderStyle}>
-                    Harga
-                  </th>
-
-                  <th style={tableHeaderStyle}>
-                    Terjual
-                  </th>
-
-                  <th style={tableHeaderStyle}>
-                    Stok
-                  </th>
-
-                  <th
-                    style={{
-                      ...tableHeaderStyle,
-                      textAlign: "center",
-                    }}
-                  >
-                    Aksi
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {addons.map((addon) => (
-                  <tr key={addon.id}>
-                    <td style={tableCellStyle}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "12px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: "42px",
-                            height: "42px",
-                            borderRadius: "9px",
-                            backgroundColor: "#f4e8eb",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            color: "#8f2638",
-                            fontWeight: "700",
-                            fontSize: "14px",
-                            flexShrink: 0,
-                          }}
-                        >
-                          +
-                        </div>
-
-                        <div>
-                          <strong
-                            style={{
-                              display: "block",
-                              fontSize: "13px",
-                              color: "#211b1d",
-                            }}
-                          >
-                            {addon.name}
-                          </strong>
-
-                          <span
-                            style={{
-                              display: "block",
-                              marginTop: "3px",
-                              fontSize: "11px",
-                              color: "#999",
-                            }}
-                          >
-                            {addon.description}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td style={tableCellStyle}>
-                      <strong
-                        style={{
-                          fontSize: "12px",
-                          color: "#8f2638",
-                        }}
-                      >
-                        {addon.price}
-                      </strong>
-                    </td>
-
-                    <td style={tableCellStyle}>
-                      <span
-                        style={{
-                          fontSize: "12px",
-                          color: "#555",
-                        }}
-                      >
-                        {addon.sold}
-                      </span>
-                    </td>
-
-                    <td style={tableCellStyle}>
-                      <span
-                        style={{
-                          display: "inline-block",
-                          padding: "6px 10px",
-                          borderRadius: "6px",
-                          backgroundColor:
-                            addon.stock === "Tersedia"
-                              ? "#e9f5ec"
-                              : "#fbeaec",
-                          color:
-                            addon.stock === "Tersedia"
-                              ? "#4f8a62"
-                              : "#8f2638",
-                          fontSize: "10px",
-                          fontWeight: "600",
-                        }}
-                      >
-                        {addon.stock}
-                      </span>
-                    </td>
-
-                    <td
-                      style={{
-                        ...tableCellStyle,
-                        textAlign: "center",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "center",
-                          gap: "7px",
-                        }}
-                      >
-                        <button
-                          type="button"
-                          style={actionButtonStyle}
-                        >
-                          Edit
-                        </button>
-
-                        <button
-                          type="button"
-                          style={{
-                            ...actionButtonStyle,
-                            color: "#8f2638",
-                          }}
-                        >
-                          Hapus
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* HIGHLIGHT */}
-
-          <div
-            style={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              padding: "22px",
+              padding: "20px 22px",
+              borderBottom: "1px solid #eee",
             }}
           >
             <h2
@@ -480,234 +553,464 @@ function AddonPage() {
                 color: "#211b1d",
               }}
             >
-              Add-on Terlaris
+              Daftar Add-on
             </h2>
 
             <p
               style={{
-                margin: "6px 0 22px",
+                margin: "6px 0 0",
                 fontSize: "12px",
                 color: "#888",
               }}
             >
-              Tambahan menu dengan jumlah penjualan tertinggi.
+              Daftar tambahan yang tersedia pada restoran.
             </p>
+          </div>
 
-            <AddonHighlight
-              rank="01"
-              name="Extra Egg"
-              sold="38 terjual"
-              price="Rp 5.000"
-            />
+          {/* =========================
+              LOADING
+          ========================= */}
 
-            <AddonHighlight
-              rank="02"
-              name="Extra Noodle"
-              sold="31 terjual"
-              price="Rp 7.000"
-            />
-
-            <AddonHighlight
-              rank="03"
-              name="Chashu"
-              sold="27 terjual"
-              price="Rp 10.000"
-            />
-
-            {/* INFO */}
-
+          {loading ? (
             <div
               style={{
-                marginTop: "24px",
-                padding: "16px",
-                borderRadius: "10px",
-                backgroundColor: "#f7f5f6",
-              }}
-            >
-              <span
-                style={{
-                  display: "block",
-                  fontSize: "11px",
-                  color: "#888",
-                }}
-              >
-                Catatan
-              </span>
-
-              <strong
-                style={{
-                  display: "block",
-                  marginTop: "6px",
-                  fontSize: "14px",
-                  color: "#211b1d",
-                }}
-              >
-                Add-on meningkatkan fleksibilitas pesanan.
-              </strong>
-
-              <p
-                style={{
-                  margin: "8px 0 0",
-                  fontSize: "11px",
-                  lineHeight: "1.6",
-                  color: "#777",
-                }}
-              >
-                Pelanggan dapat menambahkan topping sesuai
-                kebutuhan pada menu yang mendukung add-on.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* BOTTOM INFORMATION */}
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "24px",
-            marginTop: "24px",
-          }}
-        >
-          {/* STOCK STATUS */}
-
-          <div
-            style={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              padding: "22px",
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "17px",
-                color: "#211b1d",
-              }}
-            >
-              Status Stok
-            </h2>
-
-            <p
-              style={{
-                margin: "6px 0 18px",
-                fontSize: "12px",
+                padding: "50px",
+                textAlign: "center",
                 color: "#888",
+                fontSize: "13px",
               }}
             >
-              Kondisi stok add-on saat ini.
-            </p>
-
-            <div style={summaryRowStyle}>
-              <span style={summaryLabelStyle}>
-                Stok tersedia
-              </span>
-
-              <strong
-                style={{
-                  fontSize: "15px",
-                  color: "#4f8a62",
-                }}
-              >
-                4
-              </strong>
+              Memuat data add-on...
             </div>
-
+          ) : filteredAddons.length === 0 ? (
             <div
               style={{
-                ...summaryRowStyle,
-                borderBottom: "none",
-              }}
-            >
-              <span style={summaryLabelStyle}>
-                Stok habis
-              </span>
-
-              <strong
-                style={{
-                  fontSize: "15px",
-                  color: "#8f2638",
-                }}
-              >
-                1
-              </strong>
-            </div>
-          </div>
-
-          {/* SALES INFORMATION */}
-
-          <div
-            style={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #eee",
-              borderRadius: "14px",
-              padding: "22px",
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "17px",
-                color: "#211b1d",
-              }}
-            >
-              Informasi Penjualan
-            </h2>
-
-            <p
-              style={{
-                margin: "6px 0 18px",
-                fontSize: "12px",
+                padding: "50px",
+                textAlign: "center",
                 color: "#888",
+                fontSize: "13px",
               }}
             >
-              Ringkasan penjualan add-on.
-            </p>
-
+              Belum ada add-on yang ditemukan.
+            </div>
+          ) : (
             <div
               style={{
-                padding: "15px",
-                borderRadius: "10px",
-                backgroundColor: "#f7f5f6",
+                overflowX: "auto",
               }}
             >
-              <span
+              <table
                 style={{
-                  display: "block",
-                  fontSize: "11px",
-                  color: "#888",
+                  width: "100%",
+                  borderCollapse: "collapse",
                 }}
               >
-                Total Add-on Terjual
-              </span>
+                <thead>
+                  <tr
+                    style={{
+                      backgroundColor: "#faf9f9",
+                      textAlign: "left",
+                    }}
+                  >
+                    <th style={tableHeaderStyle}>
+                      Add-on
+                    </th>
 
-              <strong
-                style={{
-                  display: "block",
-                  marginTop: "5px",
-                  fontSize: "22px",
-                  color: "#8f2638",
-                }}
-              >
-                129
-              </strong>
+                    <th style={tableHeaderStyle}>
+                      Menu
+                    </th>
 
-              <span
-                style={{
-                  display: "block",
-                  marginTop: "4px",
-                  fontSize: "11px",
-                  color: "#777",
-                }}
-              >
-                Dari seluruh jenis add-on
-              </span>
+                    <th style={tableHeaderStyle}>
+                      Harga
+                    </th>
+
+                    <th
+                      style={{
+                        ...tableHeaderStyle,
+                        textAlign: "center",
+                      }}
+                    >
+                      Aksi
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredAddons.map((addon) => (
+                    <tr key={addon.id}>
+                      {/* ADDON */}
+
+                      <td style={tableCellStyle}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "12px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: "42px",
+                              height: "42px",
+                              borderRadius: "9px",
+                              backgroundColor: "#f4e8eb",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "#8f2638",
+                              fontWeight: "700",
+                              fontSize: "14px",
+                              flexShrink: 0,
+                            }}
+                          >
+                            +
+                          </div>
+
+                          <div>
+                            <strong
+                              style={{
+                                display: "block",
+                                fontSize: "13px",
+                                color: "#211b1d",
+                              }}
+                            >
+                              {addon.name}
+                            </strong>
+
+                            {addon.description && (
+                              <span
+                                style={{
+                                  display: "block",
+                                  marginTop: "3px",
+                                  fontSize: "11px",
+                                  color: "#999",
+                                }}
+                              >
+                                {addon.description}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* MENU */}
+
+                      <td style={tableCellStyle}>
+                        <span
+                          style={{
+                            fontSize: "12px",
+                            color: "#555",
+                          }}
+                        >
+                          {addon.menu_name || "-"}
+                        </span>
+                      </td>
+
+                      {/* PRICE */}
+
+                      <td style={tableCellStyle}>
+                        <strong
+                          style={{
+                            fontSize: "12px",
+                            color: "#8f2638",
+                          }}
+                        >
+                          {formatRupiah(addon.price)}
+                        </strong>
+                      </td>
+
+                      {/* ACTION */}
+
+                      <td
+                        style={{
+                          ...tableCellStyle,
+                          textAlign: "center",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "center",
+                            gap: "7px",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleOpenEdit(addon)
+                            }
+                            disabled={
+                              deletingId === addon.id
+                            }
+                            style={actionButtonStyle}
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDeleteAddon(addon)
+                            }
+                            disabled={
+                              deletingId === addon.id
+                            }
+                            style={{
+                              ...actionButtonStyle,
+                              color: "#8f2638",
+                            }}
+                          >
+                            {deletingId === addon.id
+                              ? "Menghapus..."
+                              : "Hapus"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
+          )}
         </div>
       </main>
+
+      {/* =========================
+          ADD MODAL
+      ========================= */}
+
+      {showAddModal && (
+        <div style={modalOverlayStyle}>
+          <div style={modalCardStyle}>
+            <div style={modalHeaderStyle}>
+              <div>
+                <h2 style={modalTitleStyle}>
+                  Tambah Add-on
+                </h2>
+
+                <p style={modalDescriptionStyle}>
+                  Tambahkan topping atau tambahan untuk menu.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                style={closeButtonStyle}
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleAddAddon}>
+              <div style={formGroupStyle}>
+                <label style={formLabelStyle}>
+                  Menu
+                </label>
+
+                <select
+                  value={addForm.menu_id}
+                  onChange={(event) =>
+                    setAddForm({
+                      ...addForm,
+                      menu_id: event.target.value,
+                    })
+                  }
+                  style={formInputStyle}
+                >
+                  <option value="">
+                    Pilih Menu
+                  </option>
+
+                  {menus.map((menu) => (
+                    <option
+                      key={menu.id}
+                      value={menu.id}
+                    >
+                      {menu.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={formGroupStyle}>
+                <label style={formLabelStyle}>
+                  Nama Add-on
+                </label>
+
+                <input
+                  type="text"
+                  placeholder="Contoh: Extra Egg"
+                  value={addForm.name}
+                  onChange={(event) =>
+                    setAddForm({
+                      ...addForm,
+                      name: event.target.value,
+                    })
+                  }
+                  style={formInputStyle}
+                />
+              </div>
+
+              <div style={formGroupStyle}>
+                <label style={formLabelStyle}>
+                  Harga Tambahan
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Contoh: 5000"
+                  value={addForm.price}
+                  onChange={(event) =>
+                    setAddForm({
+                      ...addForm,
+                      price: event.target.value,
+                    })
+                  }
+                  style={formInputStyle}
+                />
+              </div>
+
+              <div style={modalFooterStyle}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowAddModal(false)
+                  }
+                  style={cancelButtonStyle}
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={saving}
+                  style={saveButtonStyle}
+                >
+                  {saving
+                    ? "Menyimpan..."
+                    : "Simpan Add-on"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================
+          EDIT MODAL
+      ========================= */}
+
+      {showEditModal && (
+        <div style={modalOverlayStyle}>
+          <div style={modalCardStyle}>
+            <div style={modalHeaderStyle}>
+              <div>
+                <h2 style={modalTitleStyle}>
+                  Edit Add-on
+                </h2>
+
+                <p style={modalDescriptionStyle}>
+                  Ubah informasi add-on.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowEditModal(false)
+                }
+                style={closeButtonStyle}
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateAddon}>
+              <div style={formGroupStyle}>
+                <label style={formLabelStyle}>
+                  Menu
+                </label>
+
+                <input
+                  type="text"
+                  value={
+                    editingAddon?.menu_name || "-"
+                  }
+                  disabled
+                  style={{
+                    ...formInputStyle,
+                    backgroundColor: "#f5f5f5",
+                    color: "#888",
+                  }}
+                />
+              </div>
+
+              <div style={formGroupStyle}>
+                <label style={formLabelStyle}>
+                  Nama Add-on
+                </label>
+
+                <input
+                  type="text"
+                  placeholder="Nama Add-on"
+                  value={editForm.name}
+                  onChange={(event) =>
+                    setEditForm({
+                      ...editForm,
+                      name: event.target.value,
+                    })
+                  }
+                  style={formInputStyle}
+                />
+              </div>
+
+              <div style={formGroupStyle}>
+                <label style={formLabelStyle}>
+                  Harga Tambahan
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Contoh: 5000"
+                  value={editForm.price}
+                  onChange={(event) =>
+                    setEditForm({
+                      ...editForm,
+                      price: event.target.value,
+                    })
+                  }
+                  style={formInputStyle}
+                />
+              </div>
+
+              <div style={modalFooterStyle}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowEditModal(false)
+                  }
+                  style={cancelButtonStyle}
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={saving}
+                  style={saveButtonStyle}
+                >
+                  {saving
+                    ? "Menyimpan..."
+                    : "Simpan Perubahan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -746,7 +1049,7 @@ const statDescriptionStyle = {
 ========================= */
 
 const filterSelectStyle = {
-  width: "160px",
+  width: "180px",
   height: "42px",
   border: "1px solid #ddd",
   borderRadius: "8px",
@@ -790,97 +1093,112 @@ const actionButtonStyle = {
 };
 
 /* =========================
-   SUMMARY
+   MODAL
 ========================= */
 
-const summaryRowStyle = {
+const modalOverlayStyle = {
+  position: "fixed",
+  inset: 0,
+  backgroundColor: "rgba(0, 0, 0, 0.45)",
   display: "flex",
-  justifyContent: "space-between",
   alignItems: "center",
-  padding: "13px 0",
-  borderBottom: "1px solid #eee",
+  justifyContent: "center",
+  zIndex: 9999,
+  padding: "20px",
 };
 
-const summaryLabelStyle = {
-  fontSize: "13px",
+const modalCardStyle = {
+  width: "100%",
+  maxWidth: "500px",
+  backgroundColor: "#ffffff",
+  borderRadius: "16px",
+  padding: "24px",
+  boxSizing: "border-box",
+  boxShadow: "0 20px 50px rgba(0, 0, 0, 0.15)",
+};
+
+const modalHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  marginBottom: "24px",
+};
+
+const modalTitleStyle = {
+  margin: 0,
+  fontSize: "20px",
+  fontWeight: "700",
+  color: "#211b1d",
+};
+
+const modalDescriptionStyle = {
+  margin: "6px 0 0",
+  fontSize: "12px",
+  color: "#888",
+};
+
+const closeButtonStyle = {
+  border: "none",
+  backgroundColor: "#f7f5f6",
+  width: "32px",
+  height: "32px",
+  borderRadius: "8px",
+  fontSize: "20px",
+  color: "#777",
+  cursor: "pointer",
+};
+
+const formGroupStyle = {
+  marginBottom: "18px",
+};
+
+const formLabelStyle = {
+  display: "block",
+  marginBottom: "7px",
+  fontSize: "12px",
+  fontWeight: "600",
   color: "#555",
 };
 
-/* =========================
-   ADDON HIGHLIGHT
-========================= */
+const formInputStyle = {
+  width: "100%",
+  height: "42px",
+  border: "1px solid #ddd",
+  borderRadius: "8px",
+  padding: "0 12px",
+  fontSize: "13px",
+  outline: "none",
+  boxSizing: "border-box",
+  backgroundColor: "#ffffff",
+};
 
-function AddonHighlight({
-  rank,
-  name,
-  sold,
-  price,
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "12px",
-        padding: "13px 0",
-        borderBottom: "1px solid #eee",
-      }}
-    >
-      <div
-        style={{
-          width: "32px",
-          height: "32px",
-          borderRadius: "8px",
-          backgroundColor: "#f4e8eb",
-          color: "#8f2638",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "10px",
-          fontWeight: "700",
-          flexShrink: 0,
-        }}
-      >
-        {rank}
-      </div>
+const modalFooterStyle = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: "10px",
+  marginTop: "26px",
+};
 
-      <div
-        style={{
-          flex: 1,
-        }}
-      >
-        <strong
-          style={{
-            display: "block",
-            fontSize: "13px",
-            color: "#211b1d",
-          }}
-        >
-          {name}
-        </strong>
+const cancelButtonStyle = {
+  border: "1px solid #ddd",
+  backgroundColor: "#ffffff",
+  color: "#555",
+  padding: "10px 16px",
+  borderRadius: "8px",
+  fontSize: "12px",
+  fontWeight: "600",
+  cursor: "pointer",
+};
 
-        <span
-          style={{
-            display: "block",
-            marginTop: "3px",
-            fontSize: "11px",
-            color: "#999",
-          }}
-        >
-          {sold}
-        </span>
-      </div>
-
-      <strong
-        style={{
-          fontSize: "11px",
-          color: "#8f2638",
-        }}
-      >
-        {price}
-      </strong>
-    </div>
-  );
-}
+const saveButtonStyle = {
+  border: "none",
+  backgroundColor: "#8f2638",
+  color: "#ffffff",
+  padding: "10px 16px",
+  borderRadius: "8px",
+  fontSize: "12px",
+  fontWeight: "600",
+  cursor: "pointer",
+};
 
 export default AddonPage;
