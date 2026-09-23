@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/admin/AdminSidebar";
 
 import {
   getTables,
-  getTableQr,
   createTable,
   updateTable,
   deleteTable,
+  getTableQr,
+  downloadTableQr,
 } from "../../services/tableService";
 
 function TablePage() {
@@ -17,20 +18,19 @@ function TablePage() {
 
   const [error, setError] = useState("");
 
-  const [statusFilter, setStatusFilter] = useState("Semua");
-
-  const [selectedTable, setSelectedTable] = useState(null);
-  const [qrUrl, setQrUrl] = useState("");
-  const [qrLoading, setQrLoading] = useState(false);
-
-  const [showForm, setShowForm] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [editingTable, setEditingTable] = useState(null);
+
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [qrImage, setQrImage] = useState("");
+  const [selectedQrTable, setSelectedQrTable] =
+    useState(null);
+  const [qrLoading, setQrLoading] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
     code: "",
-    capacity: "",
-    status: "available",
+    capacity: 1,
   });
 
   // =========================
@@ -44,8 +44,6 @@ function TablePage() {
 
       const result = await getTables();
 
-      console.log("Data meja:", result);
-
       const tableData =
         result?.data ||
         result?.tables ||
@@ -58,11 +56,6 @@ function TablePage() {
           : []
       );
     } catch (err) {
-      console.error(
-        "Gagal mengambil data meja:",
-        err
-      );
-
       setError(
         err.response?.data?.message ||
           "Gagal mengambil data meja."
@@ -77,217 +70,87 @@ function TablePage() {
   }, []);
 
   // =========================
-  // FORMAT STATUS
+  // FORM
   // =========================
 
-  const formatStatus = (status) => {
-    const value = String(
-      status || ""
-    ).toLowerCase();
+  const handleChange = (e) => {
+    const { name, value } = e.target;
 
-    if (
-      value === "available" ||
-      value === "tersedia"
-    ) {
-      return "Tersedia";
-    }
-
-    if (
-      value === "occupied" ||
-      value === "terisi"
-    ) {
-      return "Terisi";
-    }
-
-    if (
-      value === "inactive" ||
-      value === "nonaktif"
-    ) {
-      return "Nonaktif";
-    }
-
-    return status || "-";
+    setForm((prev) => ({
+      ...prev,
+      [name]:
+        name === "capacity"
+          ? Number(value)
+          : value,
+    }));
   };
 
-  // =========================
-  // FILTER
-  // =========================
-
-  const filteredTables = useMemo(() => {
-    if (statusFilter === "Semua") {
-      return tables;
-    }
-
-    return tables.filter(
-      (table) =>
-        formatStatus(table.status) ===
-        statusFilter
-    );
-  }, [tables, statusFilter]);
-
-  // =========================
-  // STATS
-  // =========================
-
-  const totalTables = tables.length;
-
-  const availableTables = tables.filter(
-    (table) =>
-      formatStatus(table.status) ===
-      "Tersedia"
-  ).length;
-
-  const occupiedTables = tables.filter(
-    (table) =>
-      formatStatus(table.status) ===
-      "Terisi"
-  ).length;
-
-  const activeQr = tables.filter(
-    (table) =>
-      table?.code ||
-      table?.qr_code
-  ).length;
-
-  // =========================
-  // OPEN ADD FORM
-  // =========================
-
-  const handleAdd = () => {
+  const openAddModal = () => {
     setEditingTable(null);
 
     setForm({
       name: "",
       code: "",
-      capacity: "",
-      status: "available",
+      capacity: 1,
     });
 
-    setError("");
-    setShowForm(true);
+    setShowModal(true);
   };
 
-  // =========================
-  // OPEN EDIT FORM
-  // =========================
-
-  const handleEdit = (table) => {
+  const openEditModal = (table) => {
     setEditingTable(table);
 
     setForm({
       name: table?.name || "",
-      code:
-        table?.code ||
-        table?.qr_code ||
-        "",
+      code: table?.code || "",
       capacity:
-        table?.capacity ??
-        "",
-      status:
-        table?.status ||
-        "available",
+        Number(table?.capacity || 1),
     });
 
-    setError("");
-    setShowForm(true);
+    setShowModal(true);
   };
 
-  // =========================
-  // FORM INPUT
-  // =========================
+  const closeModal = () => {
+    if (saving) return;
 
-  const handleFormChange = (event) => {
-    const { name, value } =
-      event.target;
+    setShowModal(false);
+    setEditingTable(null);
 
-    if (name === "capacity") {
-      // Izinkan input kosong
-      if (value === "") {
-        setForm((prev) => ({
-          ...prev,
-          capacity: "",
-        }));
-
-        return;
-      }
-
-      const numberValue =
-        Number(value);
-
-      // Kapasitas maksimal 10 orang
-      if (numberValue > 10) {
-        return;
-      }
-
-      // Kapasitas minimal 1 orang
-      if (numberValue < 1) {
-        return;
-      }
-
-      setForm((prev) => ({
-        ...prev,
-        capacity: value,
-      }));
-
-      return;
-    }
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setForm({
+      name: "",
+      code: "",
+      capacity: 1,
+    });
   };
 
   // =========================
   // SAVE TABLE
   // =========================
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    // =========================
-    // VALIDASI NAMA
-    // =========================
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
     if (!form.name.trim()) {
       alert("Nama meja wajib diisi.");
       return;
     }
 
-    // =========================
-    // VALIDASI KODE
-    // =========================
-
     if (!form.code.trim()) {
       alert("Kode meja wajib diisi.");
       return;
     }
 
-    // =========================
-    // VALIDASI KAPASITAS
-    // =========================
-
-    const capacity =
-      Number(form.capacity);
-
     if (
       !form.capacity ||
-      Number.isNaN(capacity)
+      Number(form.capacity) < 1
     ) {
-      alert(
-        "Kapasitas meja wajib diisi."
-      );
-      return;
-    }
-
-    if (capacity < 1) {
       alert(
         "Kapasitas meja minimal 1 orang."
       );
       return;
     }
 
-    if (capacity > 10) {
+    if (Number(form.capacity) > 10) {
       alert(
         "Kapasitas meja maksimal 10 orang."
       );
@@ -296,19 +159,16 @@ function TablePage() {
 
     try {
       setSaving(true);
-      setError("");
 
       const tableData = {
         name: form.name.trim(),
         code: form.code.trim(),
-        capacity: capacity,
-        status: form.status,
-      };
+        capacity: Number(form.capacity),
 
-      console.log(
-        "Data meja yang dikirim:",
-        tableData
-      );
+        // Backend tetap membutuhkan meja aktif,
+        // tetapi status ini tidak ditampilkan di UI.
+        is_active: true,
+      };
 
       if (editingTable) {
         await updateTable(
@@ -317,33 +177,17 @@ function TablePage() {
         );
 
         alert(
-          "Data meja berhasil diperbarui."
+          "Meja berhasil diperbarui."
         );
       } else {
         await createTable(tableData);
 
-        alert(
-          "Meja berhasil ditambahkan."
-        );
+        alert("Meja berhasil ditambahkan.");
       }
 
-      setShowForm(false);
-      setEditingTable(null);
-
-      setForm({
-        name: "",
-        code: "",
-        capacity: "",
-        status: "available",
-      });
-
+      closeModal();
       await loadTables();
     } catch (err) {
-      console.error(
-        "Gagal menyimpan meja:",
-        err
-      );
-
       alert(
         err.response?.data?.message ||
           "Gagal menyimpan data meja."
@@ -359,27 +203,18 @@ function TablePage() {
 
   const handleDelete = async (table) => {
     const confirmed = window.confirm(
-      `Apakah kamu yakin ingin menghapus meja "${table?.name || table?.code || ""}"?`
+      `Apakah kamu yakin ingin menghapus meja "${table?.name}"?`
     );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     try {
-      setError("");
-
       await deleteTable(table.id);
 
       alert("Meja berhasil dihapus.");
 
       await loadTables();
     } catch (err) {
-      console.error(
-        "Gagal menghapus meja:",
-        err
-      );
-
       alert(
         err.response?.data?.message ||
           "Gagal menghapus meja."
@@ -394,30 +229,21 @@ function TablePage() {
   const handleShowQr = async (table) => {
     try {
       setQrLoading(true);
-      setSelectedTable(table);
+      setSelectedQrTable(table);
+      setShowQrModal(true);
+      setQrImage("");
 
-      if (qrUrl) {
-        URL.revokeObjectURL(qrUrl);
-        setQrUrl("");
-      }
+      const imageUrl =
+        await getTableQr(table.id);
 
-      const url = await getTableQr(
-        table.id
-      );
-
-      setQrUrl(url);
+      setQrImage(imageUrl);
     } catch (err) {
-      console.error(
-        "Gagal mengambil QR:",
-        err
-      );
-
       alert(
         err.response?.data?.message ||
           "Gagal mengambil QR meja."
       );
 
-      setSelectedTable(null);
+      setShowQrModal(false);
     } finally {
       setQrLoading(false);
     }
@@ -427,159 +253,137 @@ function TablePage() {
   // CLOSE QR
   // =========================
 
-  const closeQr = () => {
-    if (qrUrl) {
-      URL.revokeObjectURL(qrUrl);
+  const closeQrModal = () => {
+    setShowQrModal(false);
+    setSelectedQrTable(null);
+
+    if (qrImage) {
+      URL.revokeObjectURL(qrImage);
     }
 
-    setQrUrl("");
-    setSelectedTable(null);
+    setQrImage("");
   };
 
   // =========================
   // DOWNLOAD QR
   // =========================
 
-  const downloadQr = () => {
-    if (!qrUrl || !selectedTable) {
-      return;
+  const handleDownloadQr = async (table) => {
+    try {
+      const blob =
+        await downloadTableQr(table.id);
+
+      const url =
+        window.URL.createObjectURL(blob);
+
+      const link =
+        document.createElement("a");
+
+      link.href = url;
+
+      link.download = `QR-${table.code || table.name}.png`;
+
+      document.body.appendChild(link);
+
+      link.click();
+
+      link.remove();
+
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(
+        err.response?.data?.message ||
+          "Gagal mengunduh QR meja."
+      );
     }
-
-    const link =
-      document.createElement("a");
-
-    link.href = qrUrl;
-
-    link.download = `QR-${selectedTable.code || selectedTable.name || selectedTable.id}.svg`;
-
-    document.body.appendChild(link);
-
-    link.click();
-
-    document.body.removeChild(link);
   };
-
-  // =========================
-  // STATUS BADGE
-  // =========================
-
-  const StatusBadge = ({ status }) => {
-    const normalized =
-      formatStatus(status);
-
-    let background = "#f3f4f6";
-    let color = "#374151";
-
-    if (normalized === "Tersedia") {
-      background = "#ecfdf5";
-      color = "#059669";
-    }
-
-    if (normalized === "Terisi") {
-      background = "#fff7ed";
-      color = "#ea580c";
-    }
-
-    if (normalized === "Nonaktif") {
-      background = "#fef2f2";
-      color = "#dc2626";
-    }
-
-    return (
-      <span
-        style={{
-          display: "inline-block",
-          padding: "6px 12px",
-          borderRadius: "20px",
-          background,
-          color,
-          fontSize: "12px",
-          fontWeight: "600",
-        }}
-      >
-        {normalized}
-      </span>
-    );
-  };
-
-  // =========================
-  // RENDER
-  // =========================
 
   return (
     <div
       style={{
-        display: "flex",
         minHeight: "100vh",
-        background: "#f8fafc",
+        backgroundColor: "#f8f9fa",
       }}
     >
       <AdminSidebar />
 
       <main
-        style={{
-          flex: 1,
-          padding: "32px",
-          marginLeft: "250px",
-        }}
-      >
-        {/* HEADER */}
+  style={{
+    marginLeft: "247px",
+    width: "calc(100% - 247px)",
+    minHeight: "100vh",
+    padding: "35px 40px",
+    boxSizing: "border-box",
+    backgroundColor: "#f8f9fa",
+  }}
+>
+        {/* =========================
+            HEADER
+        ========================= */}
+
         <div
           style={{
             display: "flex",
             justifyContent:
               "space-between",
             alignItems: "center",
-            marginBottom: "28px",
+            gap: "20px",
+            marginBottom: "25px",
           }}
         >
           <div>
-            <h1
+            <h2
               style={{
                 margin: 0,
-                fontSize: "28px",
                 fontWeight: "700",
-                color: "#111827",
+                color: "#222",
               }}
             >
               Meja & QR
-            </h1>
+            </h2>
 
             <p
               style={{
                 marginTop: "6px",
-                color: "#6b7280",
+                marginBottom: 0,
+                color: "#777",
               }}
             >
-              Kelola meja dan QR code
-              restoran
+              Kelola meja dan QR Code untuk
+              pelanggan.
             </p>
           </div>
 
           <button
-            onClick={handleAdd}
+            onClick={openAddModal}
             style={{
               border: "none",
               background: "#800000",
               color: "#fff",
-              padding: "11px 18px",
+              padding:
+                "11px 18px",
               borderRadius: "8px",
               cursor: "pointer",
               fontWeight: "600",
+              whiteSpace: "nowrap",
             }}
           >
             + Tambah Meja
           </button>
         </div>
 
-        {/* ERROR */}
+        {/* =========================
+            ERROR
+        ========================= */}
+
         {error && (
           <div
             style={{
-              background: "#fef2f2",
-              color: "#dc2626",
-              padding: "14px 18px",
-              borderRadius: "10px",
+              background: "#f8d7da",
+              color: "#842029",
+              padding:
+                "12px 15px",
+              borderRadius: "8px",
               marginBottom: "20px",
             }}
           >
@@ -587,115 +391,16 @@ function TablePage() {
           </div>
         )}
 
-        {/* STATS */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(4, 1fr)",
-            gap: "16px",
-            marginBottom: "24px",
-          }}
-        >
-          <StatCard
-            title="Total Meja"
-            value={totalTables}
-          />
+        {/* =========================
+            TABLE CARD
+        ========================= */}
 
-          <StatCard
-            title="Tersedia"
-            value={availableTables}
-          />
-
-          <StatCard
-            title="Terisi"
-            value={occupiedTables}
-          />
-
-          <StatCard
-            title="QR Aktif"
-            value={activeQr}
-          />
-        </div>
-
-        {/* FILTER */}
-        <div
-          style={{
-            background: "#fff",
-            padding: "18px",
-            borderRadius: "12px",
-            marginBottom: "20px",
-            border:
-              "1px solid #e5e7eb",
-            display: "flex",
-            justifyContent:
-              "space-between",
-            alignItems: "center",
-          }}
-        >
-          <div>
-            <strong
-              style={{
-                fontSize: "14px",
-                color: "#111827",
-              }}
-            >
-              Daftar Meja
-            </strong>
-
-            <div
-              style={{
-                fontSize: "12px",
-                color: "#6b7280",
-                marginTop: "4px",
-              }}
-            >
-              Kelola meja restoran
-              dan QR code
-            </div>
-          </div>
-
-          <select
-            value={statusFilter}
-            onChange={(event) =>
-              setStatusFilter(
-                event.target.value
-              )
-            }
-            style={{
-              padding: "10px 14px",
-              border:
-                "1px solid #d1d5db",
-              borderRadius: "8px",
-              background: "#fff",
-              outline: "none",
-            }}
-          >
-            <option value="Semua">
-              Semua Status
-            </option>
-
-            <option value="Tersedia">
-              Tersedia
-            </option>
-
-            <option value="Terisi">
-              Terisi
-            </option>
-
-            <option value="Nonaktif">
-              Nonaktif
-            </option>
-          </select>
-        </div>
-
-        {/* TABLE */}
         <div
           style={{
             background: "#fff",
             borderRadius: "12px",
-            border:
-              "1px solid #e5e7eb",
+            boxShadow:
+              "0 2px 10px rgba(0,0,0,0.05)",
             overflow: "hidden",
           }}
         >
@@ -704,122 +409,150 @@ function TablePage() {
               style={{
                 padding: "50px",
                 textAlign: "center",
-                color: "#6b7280",
+                color: "#777",
               }}
             >
               Memuat data meja...
             </div>
-          ) : filteredTables.length ===
-            0 ? (
+          ) : tables.length === 0 ? (
             <div
               style={{
                 padding: "50px",
                 textAlign: "center",
-                color: "#6b7280",
+                color: "#777",
               }}
             >
-              Belum ada data meja.
+              Belum ada meja.
             </div>
           ) : (
-            <table
+            <div
               style={{
-                width: "100%",
-                borderCollapse:
-                  "collapse",
+                overflowX: "auto",
               }}
             >
-              <thead>
-                <tr
-                  style={{
-                    background:
-                      "#f9fafb",
-                  }}
-                >
-                  <th style={thStyle}>
-                    MEJA
-                  </th>
-
-                  <th style={thStyle}>
-                    KODE QR
-                  </th>
-
-                  <th style={thStyle}>
-                    KAPASITAS
-                  </th>
-
-                  <th style={thStyle}>
-                    STATUS
-                  </th>
-
-                  <th style={thStyle}>
-                    AKSI
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredTables.map(
-                  (table, index) => (
-                    <tr
-                      key={
-                        table.id ||
-                        index
-                      }
+              <table
+                style={{
+                  width: "100%",
+                  minWidth: "850px",
+                  borderCollapse:
+                    "collapse",
+                }}
+              >
+                <thead>
+                  <tr
+                    style={{
+                      backgroundColor:
+                        "#800000",
+                      color: "#fff",
+                    }}
+                  >
+                    <th
+                      style={thStyle}
                     >
-                      <td style={tdStyle}>
-                        <strong>
-                          {table.name ||
-                            table.table_number ||
-                            "-"}
-                        </strong>
-                      </td>
+                      No
+                    </th>
 
-                      <td style={tdStyle}>
-                        <span
-                          style={{
-                            display:
-                              "inline-block",
-                            padding:
-                              "6px 10px",
-                            borderRadius:
-                              "6px",
-                            background:
-                              "#fef2f2",
-                            color:
-                              "#800000",
-                            fontSize:
-                              "12px",
-                            fontWeight:
-                              "600",
-                          }}
-                        >
-                          {table.code ||
-                            table.qr_code ||
-                            "-"}
-                        </span>
-                      </td>
+                    <th
+                      style={thStyle}
+                    >
+                      Nama Meja
+                    </th>
 
-                      <td style={tdStyle}>
-                        {table.capacity ||
-                          0}{" "}
-                        orang
-                      </td>
+                    <th
+                      style={thStyle}
+                    >
+                      Kode Meja
+                    </th>
 
-                      <td style={tdStyle}>
-                        <StatusBadge
-                          status={
-                            table.status
+                    <th
+                      style={thStyle}
+                    >
+                      Kapasitas
+                    </th>
+
+                    <th
+                      style={thStyle}
+                    >
+                      QR Code
+                    </th>
+
+                    <th
+                      style={thStyle}
+                    >
+                      Aksi
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {tables.map(
+                    (table, index) => (
+                      <tr
+                        key={table.id}
+                        style={{
+                          borderBottom:
+                            "1px solid #eee",
+                        }}
+                      >
+                        <td
+                          style={
+                            tdStyle
                           }
-                        />
-                      </td>
+                        >
+                          {index + 1}
+                        </td>
 
-                      <td style={tdStyle}>
-                        <div
-                          style={{
-                            display:
-                              "flex",
-                            gap: "8px",
-                          }}
+                        <td
+                          style={
+                            tdStyle
+                          }
+                        >
+                          <strong>
+                            {table.name ||
+                              "-"}
+                          </strong>
+                        </td>
+
+                        <td
+                          style={
+                            tdStyle
+                          }
+                        >
+                          <span
+                            style={{
+                              display:
+                                "inline-block",
+                              background:
+                                "#f1f1f1",
+                              padding:
+                                "5px 9px",
+                              borderRadius:
+                                "6px",
+                              fontSize:
+                                "13px",
+                              fontWeight:
+                                "600",
+                            }}
+                          >
+                            {table.code ||
+                              "-"}
+                          </span>
+                        </td>
+
+                        <td
+                          style={
+                            tdStyle
+                          }
+                        >
+                          {table.capacity ||
+                            0}{" "}
+                          orang
+                        </td>
+
+                        <td
+                          style={
+                            tdStyle
+                          }
                         >
                           <button
                             onClick={() =>
@@ -831,99 +564,139 @@ function TablePage() {
                               border:
                                 "none",
                               background:
-                                "#fef2f2",
-                              color:
                                 "#800000",
+                              color:
+                                "#fff",
                               padding:
-                                "7px 12px",
+                                "8px 13px",
                               borderRadius:
                                 "7px",
                               cursor:
                                 "pointer",
+                              fontSize:
+                                "13px",
                               fontWeight:
                                 "600",
                             }}
                           >
                             Lihat QR
                           </button>
+                        </td>
 
-                          <button
-                            onClick={() =>
-                              handleEdit(
-                                table
-                              )
-                            }
+                        <td
+                          style={
+                            tdStyle
+                          }
+                        >
+                          <div
                             style={{
-                              border:
-                                "none",
-                              background:
-                                "#f3f4f6",
-                              color:
-                                "#374151",
-                              padding:
-                                "7px 12px",
-                              borderRadius:
-                                "7px",
-                              cursor:
-                                "pointer",
-                              fontWeight:
-                                "600",
+                              display:
+                                "flex",
+                              gap: "8px",
+                              flexWrap:
+                                "wrap",
                             }}
                           >
-                            Edit
-                          </button>
+                            <button
+                              onClick={() =>
+                                openEditModal(
+                                  table
+                                )
+                              }
+                              style={{
+                                border:
+                                  "none",
+                                background:
+                                  "#f1f1f1",
+                                color:
+                                  "#333",
+                                padding:
+                                  "8px 12px",
+                                borderRadius:
+                                  "7px",
+                                cursor:
+                                  "pointer",
+                                fontSize:
+                                  "13px",
+                              }}
+                            >
+                              Edit
+                            </button>
 
-                          <button
-                            onClick={() =>
-                              handleDelete(
-                                table
-                              )
-                            }
-                            style={{
-                              border:
-                                "none",
-                              background:
-                                "#fef2f2",
-                              color:
-                                "#dc2626",
-                              padding:
-                                "7px 12px",
-                              borderRadius:
-                                "7px",
-                              cursor:
-                                "pointer",
-                              fontWeight:
-                                "600",
-                            }}
-                          >
-                            Hapus
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                )}
-              </tbody>
-            </table>
+                            <button
+                              onClick={() =>
+                                handleDownloadQr(
+                                  table
+                                )
+                              }
+                              style={{
+                                border:
+                                  "none",
+                                background:
+                                  "#e8f1ff",
+                                color:
+                                  "#0d6efd",
+                                padding:
+                                  "8px 12px",
+                                borderRadius:
+                                  "7px",
+                                cursor:
+                                  "pointer",
+                                fontSize:
+                                  "13px",
+                              }}
+                            >
+                              Download QR
+                            </button>
+
+                            <button
+                              onClick={() =>
+                                handleDelete(
+                                  table
+                                )
+                              }
+                              style={{
+                                border:
+                                  "none",
+                                background:
+                                  "#f8d7da",
+                                color:
+                                  "#842029",
+                                padding:
+                                  "8px 12px",
+                                borderRadius:
+                                  "7px",
+                                cursor:
+                                  "pointer",
+                                fontSize:
+                                  "13px",
+                              }}
+                            >
+                              Hapus
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </main>
 
       {/* =========================
-          FORM MODAL
+          MODAL TAMBAH / EDIT
       ========================= */}
 
-      {showForm && (
+      {showModal && (
         <div
-          onClick={() =>
-            !saving &&
-            setShowForm(false)
-          }
           style={{
             position: "fixed",
             inset: 0,
             background:
-              "rgba(0,0,0,0.45)",
+              "rgba(0,0,0,0.5)",
             display: "flex",
             justifyContent:
               "center",
@@ -933,41 +706,53 @@ function TablePage() {
           }}
         >
           <div
-            onClick={(event) =>
-              event.stopPropagation()
-            }
             style={{
+              background: "#fff",
               width: "100%",
               maxWidth: "500px",
-              background: "#fff",
-              borderRadius: "14px",
+              borderRadius: "15px",
               padding: "28px",
+              boxSizing: "border-box",
             }}
           >
-            <h2
+            <div
               style={{
-                margin: 0,
-                fontSize: "22px",
-                color: "#111827",
+                display: "flex",
+                justifyContent:
+                  "space-between",
+                alignItems: "center",
+                marginBottom: "22px",
               }}
             >
-              {editingTable
-                ? "Edit Meja"
-                : "Tambah Meja"}
-            </h2>
+              <h4
+                style={{
+                  margin: 0,
+                  fontWeight: "700",
+                }}
+              >
+                {editingTable
+                  ? "Edit Meja"
+                  : "Tambah Meja"}
+              </h4>
 
-            <p
-              style={{
-                margin:
-                  "6px 0 24px",
-                color: "#6b7280",
-                fontSize: "14px",
-              }}
-            >
-              {editingTable
-                ? "Perbarui data meja"
-                : "Tambahkan meja baru"}
-            </p>
+              <button
+                onClick={closeModal}
+                disabled={saving}
+                style={{
+                  border: "none",
+                  background:
+                    "#f1f1f1",
+                  width: "38px",
+                  height: "38px",
+                  borderRadius:
+                    "50%",
+                  cursor: "pointer",
+                  fontSize: "20px",
+                }}
+              >
+                ×
+              </button>
+            </div>
 
             <form
               onSubmit={handleSubmit}
@@ -975,19 +760,14 @@ function TablePage() {
               {/* NAMA */}
               <div
                 style={{
-                  marginBottom: "18px",
+                  marginBottom:
+                    "16px",
                 }}
               >
                 <label
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                    color:
-                      "#374151",
-                    marginBottom:
-                      "7px",
-                  }}
+                  style={
+                    labelStyle
+                  }
                 >
                   Nama Meja
                 </label>
@@ -997,7 +777,7 @@ function TablePage() {
                   name="name"
                   value={form.name}
                   onChange={
-                    handleFormChange
+                    handleChange
                   }
                   placeholder="Contoh: Table 01"
                   style={
@@ -1009,19 +789,14 @@ function TablePage() {
               {/* KODE */}
               <div
                 style={{
-                  marginBottom: "18px",
+                  marginBottom:
+                    "16px",
                 }}
               >
                 <label
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                    color:
-                      "#374151",
-                    marginBottom:
-                      "7px",
-                  }}
+                  style={
+                    labelStyle
+                  }
                 >
                   Kode Meja
                 </label>
@@ -1031,31 +806,41 @@ function TablePage() {
                   name="code"
                   value={form.code}
                   onChange={
-                    handleFormChange
+                    handleChange
                   }
                   placeholder="Contoh: HOSHI-001"
-                  style={
-                    inputStyle
-                  }
+                  style={{
+                    ...inputStyle,
+                    textTransform:
+                      "uppercase",
+                  }}
                 />
+
+                <small
+                  style={{
+                    display:
+                      "block",
+                    marginTop:
+                      "6px",
+                    color: "#777",
+                  }}
+                >
+                  Kode ini digunakan
+                  pada QR Code meja.
+                </small>
               </div>
 
               {/* KAPASITAS */}
               <div
                 style={{
-                  marginBottom: "18px",
+                  marginBottom:
+                    "25px",
                 }}
               >
                 <label
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                    color:
-                      "#374151",
-                    marginBottom:
-                      "7px",
-                  }}
+                  style={
+                    labelStyle
+                  }
                 >
                   Kapasitas
                 </label>
@@ -1069,98 +854,55 @@ function TablePage() {
                     form.capacity
                   }
                   onChange={
-                    handleFormChange
+                    handleChange
                   }
-                  placeholder="Maksimal 10 orang"
                   style={
                     inputStyle
                   }
                 />
 
-                <div
+                <small
                   style={{
-                    fontSize:
-                      "12px",
-                    color:
-                      "#6b7280",
+                    display:
+                      "block",
                     marginTop:
-                      "5px",
+                      "6px",
+                    color: "#777",
                   }}
                 >
-                  Kapasitas maksimal
-                  10 orang.
-                </div>
-              </div>
-
-              {/* STATUS */}
-              <div
-                style={{
-                  marginBottom: "26px",
-                }}
-              >
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                    color:
-                      "#374151",
-                    marginBottom:
-                      "7px",
-                  }}
-                >
-                  Status
-                </label>
-
-                <select
-                  name="status"
-                  value={
-                    form.status
-                  }
-                  onChange={
-                    handleFormChange
-                  }
-                  style={
-                    inputStyle
-                  }
-                >
-                  <option value="available">
-                    Tersedia
-                  </option>
-
-                  <option value="occupied">
-                    Terisi
-                  </option>
-                </select>
+                  Maksimal 10 orang.
+                </small>
               </div>
 
               {/* BUTTON */}
               <div
                 style={{
-                  display: "flex",
+                  display:
+                    "flex",
+                  justifyContent:
+                    "flex-end",
                   gap: "10px",
                 }}
               >
                 <button
                   type="button"
-                  disabled={saving}
-                  onClick={() =>
-                    setShowForm(false)
+                  onClick={
+                    closeModal
                   }
+                  disabled={saving}
                   style={{
-                    flex: 1,
-                    padding: "12px",
                     border:
-                      "1px solid #d1d5db",
+                      "1px solid #ddd",
                     background:
                       "#fff",
                     color:
-                      "#6b7280",
+                      "#333",
+                    padding:
+                      "10px 18px",
                     borderRadius:
                       "8px",
-                    cursor: saving
-                      ? "not-allowed"
-                      : "pointer",
+                    cursor:
+                      "pointer",
                     fontWeight:
                       "600",
                   }}
@@ -1172,26 +914,30 @@ function TablePage() {
                   type="submit"
                   disabled={saving}
                   style={{
-                    flex: 1,
-                    padding: "12px",
                     border: "none",
                     background:
-                      saving
-                        ? "#d1d5db"
-                        : "#800000",
-                    color: "#fff",
+                      "#800000",
+                    color:
+                      "#fff",
+                    padding:
+                      "10px 18px",
                     borderRadius:
                       "8px",
-                    cursor: saving
-                      ? "not-allowed"
-                      : "pointer",
+                    cursor:
+                      "pointer",
                     fontWeight:
                       "600",
+                    opacity:
+                      saving
+                        ? 0.6
+                        : 1,
                   }}
                 >
                   {saving
                     ? "Menyimpan..."
-                    : "Simpan"}
+                    : editingTable
+                    ? "Simpan Perubahan"
+                    : "Tambah Meja"}
                 </button>
               </div>
             </form>
@@ -1200,86 +946,134 @@ function TablePage() {
       )}
 
       {/* =========================
-          QR MODAL
+          MODAL QR
       ========================= */}
 
-      {selectedTable && (
+      {showQrModal && (
         <div
-          onClick={closeQr}
           style={{
             position: "fixed",
             inset: 0,
             background:
-              "rgba(0,0,0,0.45)",
+              "rgba(0,0,0,0.6)",
             display: "flex",
             justifyContent:
               "center",
             alignItems: "center",
             padding: "20px",
-            zIndex: 9999,
+            zIndex: 10000,
           }}
         >
           <div
-            onClick={(event) =>
-              event.stopPropagation()
-            }
             style={{
-              width: "100%",
-              maxWidth: "420px",
               background: "#fff",
-              borderRadius: "14px",
+              width: "100%",
+              maxWidth: "450px",
+              borderRadius: "15px",
               padding: "28px",
+              boxSizing:
+                "border-box",
               textAlign: "center",
             }}
           >
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "22px",
-                color: "#111827",
-              }}
-            >
-              QR Meja
-            </h2>
-
-            <p
-              style={{
-                margin:
-                  "8px 0 20px",
-                color: "#6b7280",
-              }}
-            >
-              {selectedTable.name ||
-                selectedTable.code}
-            </p>
-
             <div
               style={{
-                minHeight: "250px",
                 display: "flex",
                 justifyContent:
-                  "center",
+                  "space-between",
                 alignItems: "center",
                 marginBottom:
+                  "20px",
+              }}
+            >
+              <div
+                style={{
+                  textAlign:
+                    "left",
+                }}
+              >
+                <h4
+                  style={{
+                    margin: 0,
+                    fontWeight:
+                      "700",
+                  }}
+                >
+                  QR Meja
+                </h4>
+
+                <div
+                  style={{
+                    marginTop:
+                      "5px",
+                    color: "#777",
+                  }}
+                >
+                  {selectedQrTable?.name ||
+                    "-"}
+                </div>
+              </div>
+
+              <button
+                onClick={
+                  closeQrModal
+                }
+                style={{
+                  border: "none",
+                  background:
+                    "#f1f1f1",
+                  width: "38px",
+                  height: "38px",
+                  borderRadius:
+                    "50%",
+                  cursor:
+                    "pointer",
+                  fontSize:
+                    "20px",
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* QR */}
+            <div
+              style={{
+                minHeight:
+                  "300px",
+                display:
+                  "flex",
+                justifyContent:
+                  "center",
+                alignItems:
+                  "center",
+                border:
+                  "1px solid #eee",
+                borderRadius:
+                  "10px",
+                background:
+                  "#fafafa",
+                padding:
                   "20px",
               }}
             >
               {qrLoading ? (
                 <div
                   style={{
-                    color:
-                      "#6b7280",
+                    color: "#777",
                   }}
                 >
                   Memuat QR...
                 </div>
-              ) : qrUrl ? (
+              ) : qrImage ? (
                 <img
-                  src={qrUrl}
-                  alt={`QR ${selectedTable.code || selectedTable.name}`}
+                  src={qrImage}
+                  alt={`QR ${selectedQrTable?.name || "Meja"}`}
                   style={{
-                    width: "250px",
-                    height: "250px",
+                    width:
+                      "280px",
+                    height:
+                      "280px",
                     objectFit:
                       "contain",
                   }}
@@ -1287,8 +1081,7 @@ function TablePage() {
               ) : (
                 <div
                   style={{
-                    color:
-                      "#6b7280",
+                    color: "#777",
                   }}
                 >
                   QR tidak tersedia.
@@ -1296,53 +1089,68 @@ function TablePage() {
               )}
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                gap: "10px",
-              }}
-            >
-              <button
-                onClick={downloadQr}
-                disabled={!qrUrl}
+            {/* INFO */}
+            {selectedQrTable && (
+              <div
                 style={{
-                  flex: 1,
+                  marginTop:
+                    "18px",
+                  marginBottom:
+                    "18px",
+                  background:
+                    "#f8f9fa",
+                  padding:
+                    "12px",
+                  borderRadius:
+                    "8px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize:
+                      "13px",
+                    color:
+                      "#777",
+                  }}
+                >
+                  Kode Meja
+                </div>
+
+                <strong>
+                  {
+                    selectedQrTable.code
+                  }
+                </strong>
+              </div>
+            )}
+
+            {/* BUTTON DOWNLOAD */}
+            {selectedQrTable && (
+              <button
+                onClick={() =>
+                  handleDownloadQr(
+                    selectedQrTable
+                  )
+                }
+                style={{
+                  width: "100%",
                   border: "none",
                   background:
-                    qrUrl
-                      ? "#800000"
-                      : "#d1d5db",
+                    "#800000",
                   color: "#fff",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  cursor: qrUrl
-                    ? "pointer"
-                    : "not-allowed",
+                  padding:
+                    "11px 18px",
+                  borderRadius:
+                    "8px",
+                  cursor:
+                    "pointer",
                   fontWeight:
                     "600",
                 }}
               >
                 Download QR
               </button>
-
-              <button
-                onClick={closeQr}
-                style={{
-                  flex: 1,
-                  border:
-                    "1px solid #d1d5db",
-                  background: "#fff",
-                  color: "#374151",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontWeight:
-                    "600",
-                }}
-              >
-                Tutup
-              </button>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -1351,74 +1159,39 @@ function TablePage() {
 }
 
 // =========================
-// STAT CARD
-// =========================
-
-function StatCard({ title, value }) {
-  return (
-    <div
-      style={{
-        background: "#fff",
-        padding: "20px",
-        borderRadius: "12px",
-        border:
-          "1px solid #e5e7eb",
-      }}
-    >
-      <div
-        style={{
-          color: "#6b7280",
-          fontSize: "13px",
-          marginBottom: "8px",
-        }}
-      >
-        {title}
-      </div>
-
-      <div
-        style={{
-          fontSize: "26px",
-          fontWeight: "700",
-          color: "#111827",
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-// =========================
 // STYLE
 // =========================
 
-const inputStyle = {
-  width: "100%",
-  boxSizing: "border-box",
-  padding: "12px 14px",
-  border: "1px solid #d1d5db",
-  borderRadius: "9px",
-  outline: "none",
-  fontSize: "14px",
-  color: "#374151",
-  background: "#fff",
-};
-
 const thStyle = {
+  padding: "15px 14px",
   textAlign: "left",
-  padding: "14px 16px",
-  fontSize: "12px",
-  color: "#6b7280",
-  borderBottom:
-    "1px solid #e5e7eb",
+  fontSize: "13px",
+  whiteSpace: "nowrap",
 };
 
 const tdStyle = {
-  padding: "15px 16px",
-  borderBottom:
-    "1px solid #f1f5f9",
+  padding: "15px 14px",
   fontSize: "14px",
-  color: "#374151",
+  color: "#333",
+  verticalAlign: "middle",
+};
+
+const labelStyle = {
+  display: "block",
+  fontSize: "14px",
+  fontWeight: "600",
+  color: "#333",
+  marginBottom: "7px",
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: "11px 13px",
+  border: "1px solid #ddd",
+  borderRadius: "8px",
+  outline: "none",
+  boxSizing: "border-box",
+  fontSize: "14px",
 };
 
 export default TablePage;

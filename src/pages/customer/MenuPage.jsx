@@ -40,7 +40,7 @@ function MenuPage() {
   //
   // Karena tidak ada slug di URL, gunakan slug Hoshi Ramen.
 
-  const restaurantSlug = slug || "hoshi-ramen";
+  const restaurantSlug = slug;
 
   // =========================================================
   // AMBIL DATA MENU & KATEGORI
@@ -453,11 +453,11 @@ function MenuPage() {
 
                   {recommendedMenus.map((menu) => (
 
-                    <Link
-                      key={menu.id}
-                      to={`/menu/${menu.id}`}
-                      className="recommended-card"
-                    >
+                   <Link
+  key={menu.id}
+  to={`/menu/${restaurantSlug}/${menu.id}`}
+  className="recommended-card"
+>
 
                       <div className="recommended-image">
 

@@ -1,31 +1,30 @@
 import api from "./api";
 
-/* =========================
-   GET ALL ORDERS
-========================= */
-
 export const getOrders = async () => {
   const response = await api.get("/orders");
   return response.data;
 };
-
-/* =========================
-   GET ORDER DETAIL
-========================= */
 
 export const getOrderByCode = async (orderCode) => {
   const response = await api.get(`/orders/${orderCode}`);
   return response.data;
 };
 
-/* =========================
-   UPDATE ORDER STATUS
-========================= */
-
 export const updateOrderStatus = async (id, status) => {
   const response = await api.put(`/orders/${id}/status`, {
     status,
   });
+
+  return response.data;
+};
+
+export const updatePaymentStatus = async (id, paymentStatus) => {
+  const response = await api.put(
+    `/orders/${id}/payment-status`,
+    {
+      payment_status: paymentStatus,
+    }
+  );
 
   return response.data;
 };
